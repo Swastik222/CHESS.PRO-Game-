@@ -1,0 +1,10 @@
+{
+  "name": "Chess Masters",
+  "description": "A full-stack chess application featuring AI opponent, online multiplayer, global leaderboard, E2E encrypted chat, and offline play.",
+  "requestFramePermissions": [
+    "notifications"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
