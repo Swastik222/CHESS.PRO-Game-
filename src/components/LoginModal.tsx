@@ -15,7 +15,7 @@ export function LoginModal({ onClose }: { onClose: () => void }) {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      const userRef = doc(db, "users", user.uid);
+      const userRef = doc(db, "players", user.uid);
       const docSnap = await getDoc(userRef);
 
       if (!docSnap.exists()) {
@@ -33,7 +33,11 @@ export function LoginModal({ onClose }: { onClose: () => void }) {
       onClose();
     } catch (err: any) {
       console.error(err);
-      setError(err.message);
+      if (err.code === 'auth/network-request-failed') {
+        setError("Google Sign-In blocked by browser. Please open the app in a new tab.");
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -45,7 +49,7 @@ export function LoginModal({ onClose }: { onClose: () => void }) {
       const result = await signInAnonymously(auth);
       const user = result.user;
 
-      const userRef = doc(db, "users", user.uid);
+      const userRef = doc(db, "players", user.uid);
       const docSnap = await getDoc(userRef);
 
       if (!docSnap.exists()) {
@@ -63,7 +67,11 @@ export function LoginModal({ onClose }: { onClose: () => void }) {
       onClose();
     } catch (err: any) {
       console.error(err);
-      setError(err.message);
+      if (err.code === 'auth/admin-restricted-operation') {
+        setError("Anonymous Sign-In is disabled. Please enable it in Firebase Console.");
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }

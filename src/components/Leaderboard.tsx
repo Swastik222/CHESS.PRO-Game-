@@ -17,10 +17,8 @@ export function Leaderboard() {
   useEffect(() => {
     async function fetchLeaderboard() {
       try {
-        const usersRef = collection(db, "users");
-        // We order by rating first, which uses the default single-field index.
-        const q = query(usersRef, orderBy("rating", "desc"), limit(100));
-        const querySnapshot = await getDocs(q);
+        const usersRef = collection(db, "players");
+        const querySnapshot = await getDocs(usersRef);
         
         const data: LeaderboardEntry[] = [];
         querySnapshot.forEach((doc) => {
@@ -33,8 +31,10 @@ export function Leaderboard() {
           });
         });
         
-        // Filter out guests and users with 0 wins to show only real players who won matches
-        const realPlayers = data.filter(player => !player.isGuest && player.wins > 0);
+        // Filter out guests to show only real players
+        const realPlayers = data.filter(player => !player.isGuest);
+        // Sort by rating descending
+        realPlayers.sort((a, b) => b.rating - a.rating);
         setEntries(realPlayers.slice(0, 50)); // Show top 50
         setLoading(false);
       } catch (err) {
@@ -75,7 +75,7 @@ export function Leaderboard() {
             </thead>
             <tbody className="divide-y divide-white/20 dark:divide-white/10">
               {entries.map((entry, idx) => (
-                <tr key={entry.username} className="hover:bg-white/40 dark:hover:bg-white/10 transition-colors">
+                <tr key={idx} className="hover:bg-white/40 dark:hover:bg-white/10 transition-colors">
                   <td className="p-4 text-center font-medium">
                     {idx === 0 ? <Trophy className="w-5 h-5 text-yellow-500 mx-auto" /> : 
                      idx === 1 ? <Medal className="w-5 h-5 text-zinc-400 mx-auto" /> : 

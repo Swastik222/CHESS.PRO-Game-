@@ -22,8 +22,8 @@ service cloud.firestore {
              data.get('displayName', '') is string;
     }
 
-    match /users/{userId} {
-      allow read: if isSignedIn() && request.auth.uid == userId;
+    match /players/{userId} {
+      allow read: if true;
       allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid &&
                     isValidUser(incoming()) && incoming().createdAt == request.time;
       allow update: if isSignedIn() && userId == request.auth.uid;

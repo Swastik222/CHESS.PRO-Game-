@@ -108,7 +108,7 @@ export function Home({ onStart, user, onSetUser }: HomeProps) {
       const result = await signInAnonymously(auth);
       const fbUser = result.user;
 
-      const userRef = doc(db, "users", fbUser.uid);
+      const userRef = doc(db, "players", fbUser.uid);
       const docSnap = await getDoc(userRef);
 
       if (!docSnap.exists()) {
@@ -124,8 +124,15 @@ export function Home({ onStart, user, onSetUser }: HomeProps) {
         });
       }
       // We don't need to call onSetUser here, the auth state listener in App.tsx will handle it
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      if (err.code === 'auth/admin-restricted-operation') {
+        alert("Anonymous Sign-In is disabled. Please enable it in Firebase Console.");
+      } else if (err.code === 'auth/network-request-failed') {
+        alert("Network request failed. Please check your connection or open the app in a new tab.");
+      } else {
+        alert(err.message || "Failed to log in as guest");
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -168,8 +175,8 @@ export function Home({ onStart, user, onSetUser }: HomeProps) {
           </form>
         </div>
       ) : (
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 grid sm:grid-cols-2 gap-6">
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 grid sm:grid-cols-2 gap-6">
             {/* Daily Puzzle */}
             <div className="flex flex-col items-center text-center p-8 bg-white/40 dark:bg-black/40 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-2xl hover:border-purple-500/50 hover:shadow-xl transition-all duration-300 group cursor-pointer shadow-lg"
                  onClick={() => onStart("puzzle")}>

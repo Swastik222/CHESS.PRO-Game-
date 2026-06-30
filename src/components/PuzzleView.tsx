@@ -102,7 +102,7 @@ export function PuzzleView({ onExit, darkMode = true, boardTheme = "green", piec
   if (!currentPuzzle) return null;
 
   return (
-    <div className="flex flex-col h-full bg-transparent text-gray-900 dark:text-white transition-colors relative">
+    <div className="flex flex-col flex-1 h-full bg-transparent text-gray-900 dark:text-white transition-colors relative">
       <header className="flex items-center gap-4 px-6 py-4 border-b border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/40 backdrop-blur-md transition-colors relative z-10">
         <button onClick={onExit} className="p-2 hover:bg-white/50 dark:hover:bg-white/10 rounded-lg transition-colors text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
           <ArrowLeft className="w-5 h-5" />

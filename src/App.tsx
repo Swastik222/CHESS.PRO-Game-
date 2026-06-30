@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./lib/firebase";
 import { GameView } from "./components/GameView";
 import { Home } from "./components/Home";
@@ -37,43 +37,56 @@ export default function App() {
   const [pieceStyle, setPieceStyle] = useState<PieceStyle>("classic");
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubscribeSnapshot: (() => void) | undefined;
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        const userRef = doc(db, "users", firebaseUser.uid);
-        try {
-          const docSnap = await getDoc(userRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setUser({
-              uid: firebaseUser.uid,
-              username: data.displayName || "Player",
-              isGuest: data.isGuest || false,
-              rating: data.rating || 1200,
-              gamesPlayed: data.gamesPlayed || 0,
-              gamesWon: data.gamesWon || 0,
-            });
-          } else {
-            setUser({
-              uid: firebaseUser.uid,
-              username: firebaseUser.displayName || `Guest_${firebaseUser.uid.substring(0,5)}`,
-              isGuest: firebaseUser.isAnonymous,
-              rating: 1200,
-            });
+        const userRef = doc(db, "players", firebaseUser.uid);
+        
+        getDoc(userRef).then(async (docSnapshot) => {
+          if (!docSnapshot.exists()) {
+            try {
+              await setDoc(userRef, {
+                uid: firebaseUser.uid,
+                displayName: firebaseUser.displayName || `Guest_${firebaseUser.uid.substring(0,5)}`,
+                isGuest: firebaseUser.isAnonymous,
+                rating: 1200,
+                gamesPlayed: 0,
+                gamesWon: 0,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              });
+            } catch (e) {
+              console.error("Failed to create player profile", e);
+            }
           }
-        } catch (error) {
-          console.error("Error fetching user data:", error);
-          setUser({
-            uid: firebaseUser.uid,
-            username: firebaseUser.displayName || `Guest_${firebaseUser.uid.substring(0,5)}`,
-            isGuest: firebaseUser.isAnonymous,
-            rating: 1200,
+          
+          unsubscribeSnapshot = onSnapshot(userRef, (docSnap) => {
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              setUser({
+                uid: firebaseUser.uid,
+                username: data.displayName || "Player",
+                isGuest: data.isGuest || false,
+                rating: data.rating || 1200,
+                gamesPlayed: data.gamesPlayed || 0,
+                gamesWon: data.gamesWon || 0,
+              });
+            }
+          }, (error) => {
+            console.error("Error fetching user data:", error);
           });
-        }
+        });
       } else {
+        if (unsubscribeSnapshot) {
+          unsubscribeSnapshot();
+        }
         setUser(null);
       }
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
+    };
   }, []);
 
   useEffect(() => {
@@ -206,7 +219,7 @@ export default function App() {
       )}
 
       <main className="flex-1 flex overflow-hidden">
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto flex flex-col">
           {showLeaderboard ? (
             <Leaderboard />
           ) : mode === "puzzle" ? (

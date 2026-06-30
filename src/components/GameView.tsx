@@ -73,9 +73,9 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
       }
 
       const oppName = mode === "ai" ? `Bot (Lvl ${aiLevel || 2})` : (opponent || "Unknown");
-      saveMatchResult(user.uid, oppName, mode || "ai", result);
+      saveMatchResult(user.uid, oppName, mode || "ai", result, history.map(h => h.san));
     }
-  }, [isMatchOver, user, playerColor, resignedBy, game, mode, opponent]);
+  }, [isMatchOver, user, playerColor, resignedBy, game, mode, opponent, history]);
 
   const reviewFen = React.useMemo(() => {
     if (!isMatchOver) return game.fen();
@@ -175,9 +175,9 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
   const oppTime = playerColor === "w" ? bTime : wTime;
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-full lg:h-full w-full">
+    <div className="flex flex-col xl:flex-row flex-1 min-h-full xl:h-full w-full xl:overflow-hidden overflow-y-auto">
       {/* Left Aside (Match Intel, Players, Controls) */}
-      <aside className="w-full lg:w-64 border-b lg:border-b-0 lg:border-r border-white/20 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-md flex flex-col p-3 lg:p-4 gap-3 lg:gap-6 lg:overflow-y-auto shrink-0 transition-colors order-2 lg:order-1">
+      <aside className="w-full xl:w-72 border-b xl:border-b-0 xl:border-r border-white/20 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-md flex flex-col p-3 xl:p-4 gap-3 xl:gap-6 shrink-0 transition-colors order-2 xl:order-1 overflow-y-auto max-h-[40vh] xl:max-h-none">
         <section>
           <h3 className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-widest mb-3">Match Intelligence</h3>
           <div className="space-y-2">
@@ -278,7 +278,7 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
       </aside>
 
       {/* Main Board Area */}
-      <section className="flex-1 flex flex-col items-center justify-center bg-transparent px-1 py-4 lg:p-8 lg:overflow-y-auto transition-colors order-1 lg:order-2 w-full relative z-10">
+      <section className="flex-1 flex flex-col items-center justify-center bg-transparent px-2 py-4 xl:p-8 xl:overflow-y-auto transition-colors order-1 xl:order-2 w-full relative z-10 shrink-0">
         <div className="w-full max-w-[600px] flex justify-between items-end mb-2 px-1">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-white/40 dark:bg-black/40 backdrop-blur-sm border border-white/20 dark:border-white/10 flex items-center justify-center shadow-sm">
@@ -383,11 +383,11 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
               </div>
               
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (!isMatchOver) {
                     if (confirm("Are you sure you want to exit? You will forfeit this match.")) {
                       const oppName = mode === "ai" ? `Bot (Lvl ${aiLevel || 2})` : (opponent || "Unknown");
-                      saveMatchResult(user?.uid || "", oppName, mode || "ai", "loss");
+                      await saveMatchResult(user?.uid || "", oppName, mode || "ai", "loss", history.map(h => h.san));
                       onExit();
                     }
                   } else {
@@ -404,14 +404,14 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
       </section>
 
       {/* Right Aside (History, Chat) */}
-      <aside className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-white/20 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-md flex flex-col overflow-hidden shrink-0 transition-colors order-3">
+      <aside className="w-full xl:w-80 border-t xl:border-t-0 xl:border-l border-white/20 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-md flex flex-col shrink-0 transition-colors order-3 xl:max-h-none">
         <div className="flex border-b border-white/20 dark:border-white/10 shrink-0 transition-colors">
-          <div className="flex-1 py-2 lg:py-3 text-center text-[10px] font-bold text-gray-900 dark:text-white border-b-2 border-gray-900 dark:border-white backdrop-blur-sm">
+          <div className="flex-1 py-2 xl:py-3 text-center text-[10px] font-bold text-gray-900 dark:text-white border-b-2 border-gray-900 dark:border-white backdrop-blur-sm">
             MATCH HISTORY
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 lg:p-4 space-y-2 max-h-[30vh] lg:max-h-none">
+        <div className="flex-1 overflow-y-auto p-3 xl:p-4 space-y-2 max-h-[40vh] xl:max-h-none min-h-[150px]">
           {history.length === 0 ? (
             <div className="text-center text-gray-500 dark:text-[#7e7e81] text-[11px] font-mono mt-4 italic">No moves yet...</div>
           ) : (
@@ -461,8 +461,8 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
         </div>
 
         {mode === "online" && (
-          <div className="h-48 lg:h-64 border-t border-gray-200 dark:border-[#2a2a2c] flex flex-col bg-gray-50 dark:bg-[#0a0a0b] shrink-0 transition-colors">
-            <div className="flex justify-between items-center p-2 lg:p-3 border-b border-gray-200 dark:border-[#2a2a2c] transition-colors">
+          <div className="h-48 xl:h-64 border-t border-gray-200 dark:border-[#2a2a2c] flex flex-col bg-gray-50 dark:bg-[#0a0a0b] shrink-0 transition-colors">
+            <div className="flex justify-between items-center p-2 xl:p-3 border-b border-gray-200 dark:border-[#2a2a2c] transition-colors">
               <span className="text-[10px] font-bold text-gray-500 dark:text-[#7e7e81] tracking-widest uppercase">SECURE CHAT</span>
               {isEncrypted && (
                 <div className="flex items-center gap-1 text-[10px] font-bold text-green-500">
