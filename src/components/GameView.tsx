@@ -9,6 +9,7 @@ import { Chess } from "chess.js";
 
 import { BoardTheme, PieceStyle } from "../types";
 import { getCustomPieces } from "../lib/pieces";
+import { saveMatchResult } from "../lib/firebase";
 
 interface GameViewProps {
   mode: GameMode;
@@ -53,9 +54,28 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
 
   const [showResultModal, setShowResultModal] = useState(true);
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
+  const matchLogged = React.useRef(false);
 
   const isMatchOver = game.isGameOver() || !!resignedBy;
   const currentReviewIndex = reviewIndex !== null ? reviewIndex : history.length;
+
+  React.useEffect(() => {
+    if (isMatchOver && user && user.uid && !matchLogged.current) {
+      matchLogged.current = true;
+      let result: "win" | "loss" | "draw" = "draw";
+      
+      if (resignedBy) {
+        result = resignedBy === playerColor ? "loss" : "win";
+      } else if (game.isCheckmate()) {
+        result = game.turn() === playerColor ? "loss" : "win";
+      } else if (game.isDraw() || game.isStalemate() || game.isThreefoldRepetition() || game.isInsufficientMaterial()) {
+        result = "draw";
+      }
+
+      const oppName = mode === "ai" ? `Bot (Lvl ${aiLevel || 2})` : (opponent || "Unknown");
+      saveMatchResult(user.uid, oppName, mode || "ai", result);
+    }
+  }, [isMatchOver, user, playerColor, resignedBy, game, mode, opponent]);
 
   const reviewFen = React.useMemo(() => {
     if (!isMatchOver) return game.fen();
@@ -157,18 +177,18 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
   return (
     <div className="flex flex-col lg:flex-row min-h-full lg:h-full w-full">
       {/* Left Aside (Match Intel, Players, Controls) */}
-      <aside className="w-full lg:w-64 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-[#2a2a2c] bg-white dark:bg-[#0e0e10] flex flex-col p-3 lg:p-4 gap-3 lg:gap-6 lg:overflow-y-auto shrink-0 transition-colors order-2 lg:order-1">
+      <aside className="w-full lg:w-64 border-b lg:border-b-0 lg:border-r border-white/20 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-md flex flex-col p-3 lg:p-4 gap-3 lg:gap-6 lg:overflow-y-auto shrink-0 transition-colors order-2 lg:order-1">
         <section>
-          <h3 className="text-[10px] font-bold text-gray-500 dark:text-[#7e7e81] uppercase tracking-widest mb-3">Match Intelligence</h3>
+          <h3 className="text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-widest mb-3">Match Intelligence</h3>
           <div className="space-y-2">
-            <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#121214] border border-gray-200 dark:border-[#2a2a2c] flex flex-col gap-1 transition-colors">
+            <div className="p-3 rounded-lg bg-white/50 dark:bg-black/50 border border-white/20 dark:border-white/10 flex flex-col gap-1 transition-colors backdrop-blur-sm">
               <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500 dark:text-[#a1a1a5] truncate mr-2">Your Accuracy</span>
+                <span className="text-xs text-gray-600 dark:text-gray-300 truncate mr-2">Your Accuracy</span>
                 <span className="text-[10px] font-bold text-green-600 dark:text-green-400">
                   {calculateAccuracy(history.filter((_, i) => i % 2 === (playerColor === 'w' ? 0 : 1)).map(m => m.grade).filter(Boolean))}%
                 </span>
               </div>
-              <div className="w-full bg-gray-200 dark:bg-[#1d1d20] h-1 rounded-full overflow-hidden mt-1">
+              <div className="w-full bg-black/10 dark:bg-white/10 h-1 rounded-full overflow-hidden mt-1">
                 <div 
                   className="h-full bg-green-500" 
                   style={{ width: `${calculateAccuracy(history.filter((_, i) => i % 2 === (playerColor === 'w' ? 0 : 1)).map(m => m.grade).filter(Boolean))}%` }}
@@ -176,14 +196,14 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
               </div>
             </div>
 
-            <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#121214] border border-gray-200 dark:border-[#2a2a2c] flex flex-col gap-1 transition-colors">
+            <div className="p-3 rounded-lg bg-white/50 dark:bg-black/50 border border-white/20 dark:border-white/10 flex flex-col gap-1 transition-colors backdrop-blur-sm">
               <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500 dark:text-[#a1a1a5] truncate mr-2">Opponent Accuracy</span>
+                <span className="text-xs text-gray-600 dark:text-gray-300 truncate mr-2">Opponent Accuracy</span>
                 <span className="text-[10px] font-bold text-red-500 dark:text-red-400">
                   {calculateAccuracy(history.filter((_, i) => i % 2 === (playerColor === 'w' ? 1 : 0)).map(m => m.grade).filter(Boolean))}%
                 </span>
               </div>
-              <div className="w-full bg-gray-200 dark:bg-[#1d1d20] h-1 rounded-full overflow-hidden mt-1">
+              <div className="w-full bg-black/10 dark:bg-white/10 h-1 rounded-full overflow-hidden mt-1">
                 <div 
                   className="h-full bg-red-500" 
                   style={{ width: `${calculateAccuracy(history.filter((_, i) => i % 2 === (playerColor === 'w' ? 1 : 0)).map(m => m.grade).filter(Boolean))}%` }}
@@ -194,7 +214,7 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
             <button 
               onClick={requestUndo}
               disabled={history.length === 0}
-              className="w-full py-2.5 bg-gray-100 dark:bg-[#1d1d20] hover:bg-gray-200 dark:hover:bg-[#2a2a2c] disabled:opacity-50 border border-gray-300 dark:border-[#3a3a3d] rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2 text-gray-900 dark:text-white mt-2"
+              className="w-full py-2.5 bg-white/50 dark:bg-black/50 hover:bg-white/70 dark:hover:bg-black/70 disabled:opacity-50 border border-white/20 dark:border-white/10 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2 text-gray-900 dark:text-white mt-2 backdrop-blur-sm"
             >
               <RotateCcw className="w-3 h-3" />
               UNDO LAST MOVE
@@ -206,7 +226,7 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
 
         {mode === "online" && (
           <section className="flex flex-col gap-2 mt-auto">
-            <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#121214] border border-gray-200 dark:border-[#2a2a2c] flex flex-col gap-2 transition-colors">
+            <div className="p-3 rounded-lg bg-white/50 dark:bg-black/50 border border-white/20 dark:border-white/10 flex flex-col gap-2 transition-colors backdrop-blur-sm">
               <div className="flex justify-between items-center">
                 <div className="text-[10px] font-bold text-gray-500 dark:text-[#7e7e81] uppercase tracking-widest">
                   {!opponent ? "Waiting for opponent..." : "Match Room"}
@@ -258,24 +278,24 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
       </aside>
 
       {/* Main Board Area */}
-      <section className="flex-1 flex flex-col items-center justify-center bg-gray-50 dark:bg-[#0a0a0b] px-1 py-4 lg:p-8 lg:overflow-y-auto transition-colors order-1 lg:order-2 w-full">
+      <section className="flex-1 flex flex-col items-center justify-center bg-transparent px-1 py-4 lg:p-8 lg:overflow-y-auto transition-colors order-1 lg:order-2 w-full relative z-10">
         <div className="w-full max-w-[600px] flex justify-between items-end mb-2 px-1">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-[#1d1d20] flex items-center justify-center">
-              {mode === "ai" ? <Bot className="w-4 h-4 text-gray-500" /> : <Users className="w-4 h-4 text-gray-500" />}
+            <div className="w-8 h-8 rounded-full bg-white/40 dark:bg-black/40 backdrop-blur-sm border border-white/20 dark:border-white/10 flex items-center justify-center shadow-sm">
+              {mode === "ai" ? <Bot className="w-4 h-4 text-gray-700 dark:text-gray-300" /> : <Users className="w-4 h-4 text-gray-700 dark:text-gray-300" />}
             </div>
             <div>
-              <div className="font-bold text-sm text-gray-900 dark:text-white leading-none mb-1">
+              <div className="font-bold text-sm text-gray-900 dark:text-white leading-none mb-1 shadow-sm px-2 py-1 rounded bg-white/20 dark:bg-black/20 backdrop-blur-sm">
                 {mode === "local" ? (playerColor === "w" ? "Black" : "White") : (opponent || (mode === "online" ? "Waiting for opponent..." : "Opponent"))}
               </div>
             </div>
           </div>
-          <div className="text-xl font-mono font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-[#1d1d20] px-3 py-1 rounded-md leading-none">
+          <div className="text-xl font-mono font-bold text-gray-900 dark:text-white bg-white/40 dark:bg-black/40 backdrop-blur-md border border-white/20 dark:border-white/10 px-3 py-1 rounded-md leading-none shadow-sm">
             {formatTime(oppTime)}
           </div>
         </div>
 
-        <div className="w-full max-w-[600px] aspect-square border-4 border-gray-200 dark:border-[#2a2a2c] shadow-xl dark:shadow-2xl relative bg-white dark:bg-[#0a0a0b] transition-colors">
+        <div className="w-full max-w-[600px] aspect-square border-4 border-white/30 dark:border-white/10 shadow-2xl relative bg-white/50 dark:bg-black/50 backdrop-blur-md transition-colors">
           <Chessboard
             options={{
               position: reviewFen,
@@ -293,16 +313,16 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
 
         <div className="w-full max-w-[600px] flex justify-between items-start mt-2 px-1">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-[#1d1d20] flex items-center justify-center">
-              <User className="w-4 h-4 text-gray-500" />
+            <div className="w-8 h-8 rounded-full bg-white/40 dark:bg-black/40 backdrop-blur-sm border border-white/20 dark:border-white/10 flex items-center justify-center shadow-sm">
+              <User className="w-4 h-4 text-gray-700 dark:text-gray-300" />
             </div>
             <div>
-              <div className="font-bold text-sm text-gray-900 dark:text-white leading-none mb-1">
+              <div className="font-bold text-sm text-gray-900 dark:text-white leading-none mb-1 shadow-sm px-2 py-1 rounded bg-white/20 dark:bg-black/20 backdrop-blur-sm">
                 {mode === "local" ? (playerColor === "w" ? "White" : "Black") : (user?.username || "You")}
               </div>
             </div>
           </div>
-          <div className="text-xl font-mono font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-[#1d1d20] px-3 py-1 rounded-md leading-none">
+          <div className="text-xl font-mono font-bold text-gray-900 dark:text-white bg-white/40 dark:bg-black/40 backdrop-blur-md border border-white/20 dark:border-white/10 px-3 py-1 rounded-md leading-none shadow-sm">
             {formatTime(myTime)}
           </div>
         </div>
@@ -320,10 +340,10 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
                  {history[currentReviewIndex - 1].san} - {history[currentReviewIndex - 1].grade}
               </div>
             )}
-            <div className="w-full bg-white dark:bg-[#121214] border border-gray-200 dark:border-[#2a2a2c] rounded-xl p-3 flex items-center justify-between shadow-md dark:shadow-2xl transition-colors">
+            <div className="w-full bg-white/40 dark:bg-black/40 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-xl p-3 flex items-center justify-between shadow-xl transition-colors">
               <button 
                 onClick={() => setShowResultModal(true)}
-                className="px-4 py-2 text-xs font-bold text-gray-500 dark:text-[#a1a1a5] hover:text-gray-900 dark:hover:text-white transition-colors"
+                className="px-4 py-2 text-xs font-bold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 SHOW RESULTS
               </button>
@@ -332,14 +352,14 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
                 <button 
                   onClick={() => setReviewIndex(0)}
                   disabled={currentReviewIndex === 0}
-                  className="p-2 bg-gray-100 dark:bg-[#1d1d20] hover:bg-gray-200 dark:hover:bg-[#2a2a2c] disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-900 dark:text-white transition-colors border border-gray-300 dark:border-[#3a3a3d]"
+                  className="p-2 bg-white/50 dark:bg-black/50 hover:bg-white/70 dark:hover:bg-black/70 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-900 dark:text-white transition-colors border border-white/20 dark:border-white/10 backdrop-blur-sm"
                 >
                   <ChevronsLeft className="w-5 h-5" />
                 </button>
                 <button 
                   onClick={() => setReviewIndex(Math.max(0, currentReviewIndex - 1))}
                   disabled={currentReviewIndex === 0}
-                  className="p-2 bg-gray-100 dark:bg-[#1d1d20] hover:bg-gray-200 dark:hover:bg-[#2a2a2c] disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-900 dark:text-white transition-colors border border-gray-300 dark:border-[#3a3a3d]"
+                  className="p-2 bg-white/50 dark:bg-black/50 hover:bg-white/70 dark:hover:bg-black/70 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-900 dark:text-white transition-colors border border-white/20 dark:border-white/10 backdrop-blur-sm"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
@@ -349,21 +369,31 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
                 <button 
                   onClick={() => setReviewIndex(Math.min(history.length, currentReviewIndex + 1))}
                   disabled={currentReviewIndex === history.length}
-                  className="p-2 bg-gray-100 dark:bg-[#1d1d20] hover:bg-gray-200 dark:hover:bg-[#2a2a2c] disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-900 dark:text-white transition-colors border border-gray-300 dark:border-[#3a3a3d]"
+                  className="p-2 bg-white/50 dark:bg-black/50 hover:bg-white/70 dark:hover:bg-black/70 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-900 dark:text-white transition-colors border border-white/20 dark:border-white/10 backdrop-blur-sm"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
                 <button 
                   onClick={() => setReviewIndex(history.length)}
                   disabled={currentReviewIndex === history.length}
-                  className="p-2 bg-gray-100 dark:bg-[#1d1d20] hover:bg-gray-200 dark:hover:bg-[#2a2a2c] disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-900 dark:text-white transition-colors border border-gray-300 dark:border-[#3a3a3d]"
+                  className="p-2 bg-white/50 dark:bg-black/50 hover:bg-white/70 dark:hover:bg-black/70 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-900 dark:text-white transition-colors border border-white/20 dark:border-white/10 backdrop-blur-sm"
                 >
                   <ChevronsRight className="w-5 h-5" />
                 </button>
               </div>
               
               <button
-                onClick={onExit}
+                onClick={() => {
+                  if (!isMatchOver) {
+                    if (confirm("Are you sure you want to exit? You will forfeit this match.")) {
+                      const oppName = mode === "ai" ? `Bot (Lvl ${aiLevel || 2})` : (opponent || "Unknown");
+                      saveMatchResult(user?.uid || "", oppName, mode || "ai", "loss");
+                      onExit();
+                    }
+                  } else {
+                    onExit();
+                  }
+                }}
                 className="px-4 py-2 text-xs font-bold text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors"
               >
                 EXIT
@@ -374,9 +404,9 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
       </section>
 
       {/* Right Aside (History, Chat) */}
-      <aside className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-gray-200 dark:border-[#2a2a2c] bg-white dark:bg-[#0e0e10] flex flex-col overflow-hidden shrink-0 transition-colors order-3">
-        <div className="flex border-b border-gray-200 dark:border-[#2a2a2c] shrink-0 transition-colors">
-          <div className="flex-1 py-2 lg:py-3 text-center text-[10px] font-bold text-gray-900 dark:text-white border-b-2 border-gray-900 dark:border-white">
+      <aside className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-white/20 dark:border-white/10 bg-white/30 dark:bg-black/30 backdrop-blur-md flex flex-col overflow-hidden shrink-0 transition-colors order-3">
+        <div className="flex border-b border-white/20 dark:border-white/10 shrink-0 transition-colors">
+          <div className="flex-1 py-2 lg:py-3 text-center text-[10px] font-bold text-gray-900 dark:text-white border-b-2 border-gray-900 dark:border-white backdrop-blur-sm">
             MATCH HISTORY
           </div>
         </div>
@@ -444,8 +474,8 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
               {messages.map((msg) => (
                 <div key={msg.id} className={cn("flex flex-col max-w-[90%]", msg.sender === user?.username ? "ml-auto items-end" : "mr-auto items-start")}>
-                  <div className="text-[9px] text-gray-500 dark:text-[#7e7e81] mb-0.5 uppercase tracking-wider">{msg.sender}</div>
-                  <div className={cn("px-2.5 py-1.5 rounded text-[11px] text-gray-900 dark:text-white font-medium shadow-sm", msg.sender === user?.username ? "bg-blue-100 dark:bg-[#2a2a2c] rounded-tr-none" : "bg-white dark:bg-[#1d1d20] border border-gray-200 dark:border-[#2a2a2c] rounded-tl-none")}>
+                  <div className="text-[9px] text-gray-600 dark:text-gray-400 mb-0.5 uppercase tracking-wider">{msg.sender}</div>
+                  <div className={cn("px-2.5 py-1.5 rounded text-[11px] text-gray-900 dark:text-white font-medium shadow-sm backdrop-blur-sm", msg.sender === user?.username ? "bg-blue-500/20 rounded-tr-none" : "bg-white/50 dark:bg-black/50 border border-white/20 dark:border-white/10 rounded-tl-none")}>
                     {msg.text}
                   </div>
                 </div>
@@ -458,12 +488,12 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Secure message..."
-                className="w-full bg-white dark:bg-[#121214] border border-gray-200 dark:border-[#2a2a2c] rounded-lg px-3 py-2 text-[11px] text-gray-900 dark:text-white focus:outline-none focus:border-blue-500/50 pr-8 transition-colors"
+                className="w-full bg-white/50 dark:bg-black/50 border border-white/20 dark:border-white/10 rounded-lg px-3 py-2 text-[11px] text-gray-900 dark:text-white focus:outline-none focus:border-blue-500/50 pr-8 transition-colors backdrop-blur-sm"
               />
               <button 
                 type="submit" 
                 disabled={!chatInput.trim()} 
-                className="absolute right-5 top-5 text-gray-500 dark:text-[#7e7e81] hover:text-gray-900 dark:hover:text-white disabled:opacity-50 transition-colors"
+                className="absolute right-5 top-5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:opacity-50 transition-colors"
               >
                 <Send className="w-3.5 h-3.5" />
               </button>
@@ -474,9 +504,9 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
 
       {/* Match Over Modal */}
       {(game.isGameOver() || resignedBy) && showResultModal && (
-        <div className="fixed inset-0 z-50 bg-[#000000]/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#121214] border border-gray-200 dark:border-[#2a2a2c] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl transition-colors">
-            <div className="p-6 border-b border-gray-200 dark:border-[#2a2a2c] text-center shrink-0 transition-colors">
+        <div className="fixed inset-0 z-50 bg-[#000000]/40 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white/80 dark:bg-black/80 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl transition-colors">
+            <div className="p-6 border-b border-white/20 dark:border-white/10 text-center shrink-0 transition-colors">
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
                 {resignedBy 
                   ? "Resignation" 

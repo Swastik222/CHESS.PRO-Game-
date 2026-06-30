@@ -21,6 +21,7 @@ async function startServer() {
   leaderboard.set("guest_2", { username: "ChessWizard", wins: 12, rating: 1720 });
   
   const rooms = new Map<string, { players: string[]; fen: string; history: any[] }>();
+  const onlineUsers = new Map<string, { username: string; socketId: string }>();
 
   app.get("/api/leaderboard", (req, res) => {
     const sorted = Array.from(leaderboard.values()).sort((a, b) => b.rating - a.rating);
@@ -29,6 +30,39 @@ async function startServer() {
 
   io.on("connection", (socket) => {
     console.log("Client connected:", socket.id);
+
+    socket.on("register_user", (username: string) => {
+      onlineUsers.set(socket.id, { username, socketId: socket.id });
+      io.emit("online_users", Array.from(onlineUsers.values()).map(u => u.username));
+    });
+
+    socket.on("challenge_user", (data: { targetUsername: string, fromUsername: string, roomId: string }) => {
+      const targetUser = Array.from(onlineUsers.values()).find(u => u.username === data.targetUsername);
+      if (targetUser) {
+        io.to(targetUser.socketId).emit("receive_challenge", { fromUsername: data.fromUsername, roomId: data.roomId });
+      }
+    });
+
+    socket.on("accept_challenge", (data: { toUsername: string, roomId: string }) => {
+      const targetUser = Array.from(onlineUsers.values()).find(u => u.username === data.toUsername);
+      if (targetUser) {
+        io.to(targetUser.socketId).emit("challenge_accepted", { roomId: data.roomId });
+      }
+    });
+
+    socket.on("reject_challenge", (data: { toUsername: string }) => {
+      const targetUser = Array.from(onlineUsers.values()).find(u => u.username === data.toUsername);
+      if (targetUser) {
+        io.to(targetUser.socketId).emit("challenge_rejected");
+      }
+    });
+
+    socket.on("cancel_challenge", (data: { toUsername: string }) => {
+      const targetUser = Array.from(onlineUsers.values()).find(u => u.username === data.toUsername);
+      if (targetUser) {
+        io.to(targetUser.socketId).emit("challenge_cancelled");
+      }
+    });
 
     socket.on("join_room", (roomId: string, username: string) => {
       socket.join(roomId);
@@ -119,6 +153,10 @@ async function startServer() {
 
     socket.on("disconnect", () => {
       console.log("Client disconnected:", socket.id);
+      if (onlineUsers.has(socket.id)) {
+        onlineUsers.delete(socket.id);
+        io.emit("online_users", Array.from(onlineUsers.values()).map(u => u.username));
+      }
     });
   });
 

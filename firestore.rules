@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'isGuest', 'rating', 'gamesPlayed', 'gamesWon', 'createdAt', 'updatedAt']) &&
+             data.uid is string && data.uid == request.auth.uid &&
+             data.isGuest is bool &&
+             data.rating is number &&
+             data.gamesPlayed is number &&
+             data.gamesWon is number &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             data.get('displayName', '') is string;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid &&
+                    isValidUser(incoming()) && incoming().createdAt == request.time;
+      allow update: if isSignedIn() && userId == request.auth.uid;
+                    
+      match /matches/{matchId} {
+        allow read: if isSignedIn() && userId == request.auth.uid;
+        allow create: if isSignedIn() && userId == request.auth.uid;
+      }
+    }
+  }
+}

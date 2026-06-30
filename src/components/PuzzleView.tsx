@@ -102,19 +102,19 @@ export function PuzzleView({ onExit, darkMode = true, boardTheme = "green", piec
   if (!currentPuzzle) return null;
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 dark:bg-[#0a0a0b] text-gray-900 dark:text-white transition-colors">
-      <header className="flex items-center gap-4 px-6 py-4 border-b border-gray-200 dark:border-[#2a2a2c] bg-white dark:bg-[#121214] transition-colors">
-        <button onClick={onExit} className="p-2 hover:bg-gray-100 dark:hover:bg-[#2a2a2c] rounded-lg transition-colors text-gray-500 dark:text-[#a1a1a5] hover:text-gray-900 dark:hover:text-white">
+    <div className="flex flex-col h-full bg-transparent text-gray-900 dark:text-white transition-colors relative">
+      <header className="flex items-center gap-4 px-6 py-4 border-b border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/40 backdrop-blur-md transition-colors relative z-10">
+        <button onClick={onExit} className="p-2 hover:bg-white/50 dark:hover:bg-white/10 rounded-lg transition-colors text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
           <h2 className="font-bold text-lg">Daily Puzzle</h2>
-          <div className="text-xs text-gray-500 dark:text-[#7e7e81]">Rating: {currentPuzzle.rating}</div>
+          <div className="text-xs text-gray-600 dark:text-gray-300">Rating: {currentPuzzle.rating}</div>
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-1 py-4 lg:p-4 lg:overflow-y-auto overflow-visible w-full">
-        <div className="w-full max-w-[600px] aspect-square border-4 border-gray-200 dark:border-[#2a2a2c] shadow-xl dark:shadow-2xl relative bg-white dark:bg-[#0a0a0b] transition-colors">
+      <div className="flex-1 flex flex-col items-center justify-center px-1 py-4 lg:p-4 lg:overflow-y-auto overflow-visible w-full relative z-10">
+        <div className="w-full max-w-[600px] aspect-square border-4 border-white/30 dark:border-white/10 shadow-2xl relative bg-white/50 dark:bg-black/50 backdrop-blur-md transition-colors">
            {status === "failed" && (
               <div className="absolute inset-0 bg-red-500/20 z-10 flex items-center justify-center">
                  <XCircle className="w-24 h-24 text-red-500 drop-shadow-lg" />
@@ -149,7 +149,7 @@ export function PuzzleView({ onExit, darkMode = true, boardTheme = "green", piec
             }}
           />
         </div>
-        <div className="mt-8 text-center text-gray-500 dark:text-[#a1a1a5] max-w-md flex flex-col items-center gap-4">
+        <div className="mt-8 text-center text-gray-600 dark:text-gray-300 max-w-md flex flex-col items-center gap-4">
             <p>Find the best move for {playerColor}. The puzzle will automatically respond if your move is correct.</p>
             <button
                onClick={() => {
@@ -160,7 +160,7 @@ export function PuzzleView({ onExit, darkMode = true, boardTheme = "green", piec
                    }
                  }
                }}
-               className="flex items-center gap-2 px-4 py-2 bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-200 dark:hover:bg-yellow-500/30 rounded-lg font-bold transition-colors"
+               className="flex items-center gap-2 px-4 py-2 bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/30 rounded-lg font-bold transition-colors backdrop-blur-sm"
             >
               <Lightbulb className="w-4 h-4" />
               Need a Hint?

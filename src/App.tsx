@@ -1,10 +1,15 @@
 import { useState, useEffect } from "react";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "./lib/firebase";
 import { GameView } from "./components/GameView";
 import { Home } from "./components/Home";
 import { Leaderboard } from "./components/Leaderboard";
 import { PuzzleView } from "./components/PuzzleView";
 import { SettingsModal } from "./components/SettingsModal";
-import { Moon, Sun, User, Share2, Settings } from "lucide-react";
+import { LoginModal } from "./components/LoginModal";
+import { ProfileModal } from "./components/ProfileModal";
+import { Moon, Sun, User, Share2, Settings, LogOut } from "lucide-react";
 import { cn } from "./lib/utils";
 import { BoardTheme, PieceStyle } from "./types";
 
@@ -12,6 +17,10 @@ export type GameMode = "ai" | "local" | "online" | "puzzle" | null;
 export interface PlayerInfo {
   username: string;
   isGuest: boolean;
+  uid?: string;
+  rating?: number;
+  gamesPlayed?: number;
+  gamesWon?: number;
 }
 
 export default function App() {
@@ -20,10 +29,52 @@ export default function App() {
   const [user, setUser] = useState<PlayerInfo | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
   const [aiLevel, setAiLevel] = useState<number>(2);
   const [boardTheme, setBoardTheme] = useState<BoardTheme>("green");
   const [pieceStyle, setPieceStyle] = useState<PieceStyle>("classic");
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const userRef = doc(db, "users", firebaseUser.uid);
+        try {
+          const docSnap = await getDoc(userRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUser({
+              uid: firebaseUser.uid,
+              username: data.displayName || "Player",
+              isGuest: data.isGuest || false,
+              rating: data.rating || 1200,
+              gamesPlayed: data.gamesPlayed || 0,
+              gamesWon: data.gamesWon || 0,
+            });
+          } else {
+            setUser({
+              uid: firebaseUser.uid,
+              username: firebaseUser.displayName || `Guest_${firebaseUser.uid.substring(0,5)}`,
+              isGuest: firebaseUser.isAnonymous,
+              rating: 1200,
+            });
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+          setUser({
+            uid: firebaseUser.uid,
+            username: firebaseUser.displayName || `Guest_${firebaseUser.uid.substring(0,5)}`,
+            isGuest: firebaseUser.isAnonymous,
+            rating: 1200,
+          });
+        }
+      } else {
+        setUser(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (darkMode) {
@@ -45,11 +96,17 @@ export default function App() {
 
   const handleStartGame = (selectedMode: GameMode, room?: string, level?: number) => {
     if (!user) {
-      setUser({ username: `Guest_${Math.floor(Math.random() * 10000)}`, isGuest: true });
+      setShowLogin(true);
+      return;
     }
     setMode(selectedMode);
     if (room) setRoomId(room);
     if (level) setAiLevel(level);
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    setMode(null);
   };
 
   const handleShare = () => {
@@ -66,9 +123,12 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen w-full flex flex-col bg-gray-50 dark:bg-[#0a0a0b] text-gray-900 dark:text-[#e1e1e3] font-sans overflow-hidden transition-colors">
+    <div className="h-screen w-full flex flex-col bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 dark:from-indigo-950 dark:via-purple-900 dark:to-slate-900 text-gray-900 dark:text-[#e1e1e3] font-sans overflow-hidden transition-colors relative">
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-400/20 dark:bg-blue-600/20 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-pink-400/20 dark:bg-pink-600/20 blur-[120px] pointer-events-none" />
+      
       {(!mode || showLeaderboard) && (
-        <header className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-[#2a2a2c] bg-white dark:bg-[#121214] transition-colors">
+        <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/40 backdrop-blur-md transition-colors">
           <div className="flex items-center gap-4 cursor-pointer" onClick={() => { setMode(null); setShowLeaderboard(false); }}>
             <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
               <span className="text-2xl pb-1">♞</span> CHESS.<span className="text-gray-500 dark:text-[#7e7e81]">PRO</span>
@@ -82,44 +142,60 @@ export default function App() {
               <span className="text-xs text-gray-500 dark:text-[#a1a1a5] font-medium">OFFLINE MODE READY</span>
             </div>
             
-            <div className="hidden sm:flex bg-gray-100 dark:bg-[#1d1d20] rounded-lg p-1 border border-gray-200 dark:border-[#2a2a2c]">
+            <div className="hidden sm:flex bg-white/20 dark:bg-black/20 rounded-lg p-1 border border-white/20 dark:border-white/10 backdrop-blur-sm">
               <button 
                 onClick={() => { setMode(null); setShowLeaderboard(false); }}
-                className={cn("px-3 py-1 text-xs font-semibold rounded-md transition-colors", !showLeaderboard && !mode ? "bg-white dark:bg-[#2a2a2c] text-gray-900 dark:text-white shadow-sm dark:shadow-none" : "text-gray-500 dark:text-[#7e7e81] hover:text-gray-900 dark:hover:text-[#e1e1e3]")}
+                className={cn("px-3 py-1 text-xs font-semibold rounded-md transition-colors", !showLeaderboard && !mode ? "bg-white/60 dark:bg-white/10 text-gray-900 dark:text-white shadow-sm" : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white")}
               >
                 PLAY
               </button>
               <button 
                 onClick={() => setShowLeaderboard(true)}
-                className={cn("px-3 py-1 text-xs font-semibold rounded-md transition-colors", showLeaderboard ? "bg-white dark:bg-[#2a2a2c] text-gray-900 dark:text-white shadow-sm dark:shadow-none" : "text-gray-500 dark:text-[#7e7e81] hover:text-gray-900 dark:hover:text-[#e1e1e3]")}
+                className={cn("px-3 py-1 text-xs font-semibold rounded-md transition-colors", showLeaderboard ? "bg-white/60 dark:bg-white/10 text-gray-900 dark:text-white shadow-sm" : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white")}
               >
                 LEADERBOARD
               </button>
               <button 
                 onClick={handleShare}
-                className="px-3 py-1 text-xs font-semibold text-gray-500 dark:text-[#7e7e81] hover:text-gray-900 dark:hover:text-[#e1e1e3] transition-colors"
+                className="px-3 py-1 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 SHARE
               </button>
               <button 
                 onClick={() => setShowSettings(true)}
-                className="px-3 py-1 text-xs font-semibold text-gray-500 dark:text-[#7e7e81] hover:text-gray-900 dark:hover:text-[#e1e1e3] transition-colors flex items-center gap-1"
+                className="px-3 py-1 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors flex items-center gap-1"
               >
                 <Settings className="w-3.5 h-3.5" /> SETTINGS
               </button>
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3b82f6] to-[#8b5cf6] flex items-center justify-center text-[10px] font-bold text-white shadow-sm">
-                {user ? user.username.substring(0, 2).toUpperCase() : "GU"}
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold leading-none text-gray-900 dark:text-white">{user ? user.username : "NOT LOGGED IN"}</span>
-                <span className="text-[10px] text-gray-500 dark:text-[#7e7e81]">UNRANKED</span>
-              </div>
+              {user ? (
+                <>
+                  <div 
+                    className="flex items-center gap-2 cursor-pointer hover:bg-white/30 dark:hover:bg-white/10 p-1.5 rounded-lg transition-colors"
+                    onClick={() => setShowProfile(true)}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3b82f6] to-[#8b5cf6] flex items-center justify-center text-[10px] font-bold text-white shadow-sm">
+                      {user.username.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold leading-none text-gray-900 dark:text-white">{user.username}</span>
+                      <span className="text-[10px] text-gray-600 dark:text-gray-300">{user.rating ? `${user.rating} ELO` : 'UNRANKED'}</span>
+                    </div>
+                  </div>
+                  <button onClick={handleLogout} className="p-1 rounded hover:bg-white/30 dark:hover:bg-white/10 transition-colors text-gray-600 dark:text-gray-300 ml-1" title="Log Out">
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setShowLogin(true)} className="px-4 py-1.5 bg-blue-600/90 backdrop-blur hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors shadow-sm">
+                  LOGIN
+                </button>
+              )}
               <button 
                 onClick={() => setDarkMode(!darkMode)}
-                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-[#2a2a2c] transition-colors text-gray-500 dark:text-[#7e7e81] ml-2"
+                className="p-1 rounded hover:bg-white/30 dark:hover:bg-white/10 transition-colors text-gray-600 dark:text-gray-300 ml-2"
                 title="Toggle Dark Mode"
               >
                 {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -151,6 +227,14 @@ export default function App() {
           pieceStyle={pieceStyle}
           setPieceStyle={setPieceStyle}
         />
+      )}
+
+      {showLogin && (
+        <LoginModal onClose={() => setShowLogin(false)} />
+      )}
+
+      {showProfile && user && (
+        <ProfileModal user={user} onClose={() => setShowProfile(false)} />
       )}
     </div>
   );

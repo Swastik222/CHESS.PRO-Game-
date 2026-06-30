@@ -19,7 +19,7 @@ export interface MoveHistory {
 export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: string, aiLevel: number = 2) {
   const [game, setGame] = useState(new Chess());
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [opponent, setOpponent] = useState<string | null>(mode === "ai" ? "AI Master" : null);
+  const [opponent, setOpponent] = useState<string | null>(mode === "ai" ? `Bot Level ${aiLevel}` : null);
   const [playerColor, setPlayerColor] = useState<"w" | "b">("w");
   const [messages, setMessages] = useState<{ sender: string; text: string; id: string }[]>([]);
   const [history, setHistory] = useState<MoveHistory[]>([]);

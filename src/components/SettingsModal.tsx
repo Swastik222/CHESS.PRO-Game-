@@ -32,9 +32,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, boardThem
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-[#121214] border border-gray-200 dark:border-[#2a2a2c] rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-[#2a2a2c]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
+      <div className="bg-white/80 dark:bg-black/80 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center p-5 border-b border-white/20 dark:border-white/10">
           <h2 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">Settings</h2>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-[#1d1d20] text-gray-500 transition-colors">
             <X className="w-5 h-5" />
