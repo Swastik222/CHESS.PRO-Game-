@@ -65,6 +65,11 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
   React.useEffect(() => {
     if (isMatchOver && user && user.uid && !matchLogged.current) {
       matchLogged.current = true;
+      
+      if (history.length === 0) {
+        return; // Don't count games with no moves
+      }
+
       let result: "win" | "loss" | "draw" = "draw";
       
       if (resignedBy) {
@@ -174,8 +179,8 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  const myTime = playerColor === "w" ? wTime : bTime;
-  const oppTime = playerColor === "w" ? bTime : wTime;
+  const myTime = mode === "local" ? (game.turn() === "w" ? wTime : bTime) : (playerColor === "w" ? wTime : bTime);
+  const oppTime = mode === "local" ? (game.turn() === "w" ? bTime : wTime) : (playerColor === "w" ? bTime : wTime);
 
   return (
     <div className="flex flex-col xl:flex-row flex-1 min-h-full xl:h-full w-full xl:overflow-hidden overflow-y-auto">
@@ -186,30 +191,30 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
           <div className="space-y-2">
             <div className="p-3 rounded-lg bg-white/50 dark:bg-black/50 border border-white/20 dark:border-white/10 flex flex-col gap-1 transition-colors backdrop-blur-sm">
               <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-600 dark:text-gray-300 truncate mr-2">Your Accuracy</span>
+                <span className="text-xs text-gray-600 dark:text-gray-300 truncate mr-2">{mode === "local" ? "White Accuracy" : "Your Accuracy"}</span>
                 <span className="text-[10px] font-bold text-green-600 dark:text-green-400">
-                  {calculateAccuracy(history.filter((_, i) => i % 2 === (playerColor === 'w' ? 0 : 1)).map(m => m.grade).filter(Boolean))}%
+                  {calculateAccuracy(history.filter((_, i) => i % 2 === (mode === 'local' ? 0 : (playerColor === 'w' ? 0 : 1))).map(m => m.grade).filter(Boolean))}%
                 </span>
               </div>
               <div className="w-full bg-black/10 dark:bg-white/10 h-1 rounded-full overflow-hidden mt-1">
                 <div 
                   className="h-full bg-green-500" 
-                  style={{ width: `${calculateAccuracy(history.filter((_, i) => i % 2 === (playerColor === 'w' ? 0 : 1)).map(m => m.grade).filter(Boolean))}%` }}
+                  style={{ width: `${calculateAccuracy(history.filter((_, i) => i % 2 === (mode === 'local' ? 0 : (playerColor === 'w' ? 0 : 1))).map(m => m.grade).filter(Boolean))}%` }}
                 ></div>
               </div>
             </div>
 
             <div className="p-3 rounded-lg bg-white/50 dark:bg-black/50 border border-white/20 dark:border-white/10 flex flex-col gap-1 transition-colors backdrop-blur-sm">
               <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-600 dark:text-gray-300 truncate mr-2">Opponent Accuracy</span>
+                <span className="text-xs text-gray-600 dark:text-gray-300 truncate mr-2">{mode === "local" ? "Black Accuracy" : "Opponent Accuracy"}</span>
                 <span className="text-[10px] font-bold text-red-500 dark:text-red-400">
-                  {calculateAccuracy(history.filter((_, i) => i % 2 === (playerColor === 'w' ? 1 : 0)).map(m => m.grade).filter(Boolean))}%
+                  {calculateAccuracy(history.filter((_, i) => i % 2 === (mode === 'local' ? 1 : (playerColor === 'w' ? 1 : 0))).map(m => m.grade).filter(Boolean))}%
                 </span>
               </div>
               <div className="w-full bg-black/10 dark:bg-white/10 h-1 rounded-full overflow-hidden mt-1">
                 <div 
                   className="h-full bg-red-500" 
-                  style={{ width: `${calculateAccuracy(history.filter((_, i) => i % 2 === (playerColor === 'w' ? 1 : 0)).map(m => m.grade).filter(Boolean))}%` }}
+                  style={{ width: `${calculateAccuracy(history.filter((_, i) => i % 2 === (mode === 'local' ? 1 : (playerColor === 'w' ? 1 : 0))).map(m => m.grade).filter(Boolean))}%` }}
                 ></div>
               </div>
             </div>
@@ -283,7 +288,7 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
             </div>
             <div>
               <div className="font-bold text-sm text-gray-900 dark:text-white leading-none mb-1 shadow-sm px-2 py-1 rounded bg-white/20 dark:bg-black/20 backdrop-blur-sm">
-                {mode === "local" ? (playerColor === "w" ? "Black" : "White") : (opponent || (mode === "online" ? "Waiting for opponent..." : "Opponent"))}
+                {mode === "local" ? (game.turn() === "w" ? "Black" : "White") : (opponent || (mode === "online" ? "Waiting for opponent..." : "Opponent"))}
               </div>
             </div>
           </div>
@@ -298,7 +303,7 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
               position: reviewFen,
               onPieceDrop: onDrop,
               onSquareClick: onSquareClick,
-              boardOrientation: playerColor === "w" ? "white" : "black",
+              boardOrientation: mode === "local" ? (game.turn() === "w" ? "white" : "black") : (playerColor === "w" ? "white" : "black"),
               darkSquareStyle: { backgroundColor: THEME_COLORS[boardTheme].dark },
               lightSquareStyle: { backgroundColor: THEME_COLORS[boardTheme].light },
               pieces: getCustomPieces(pieceStyle),
@@ -315,7 +320,7 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
             </div>
             <div>
               <div className="font-bold text-sm text-gray-900 dark:text-white leading-none mb-1 shadow-sm px-2 py-1 rounded bg-white/20 dark:bg-black/20 backdrop-blur-sm">
-                {mode === "local" ? (playerColor === "w" ? "White" : "Black") : (user?.username || "You")}
+                {mode === "local" ? (game.turn() === "w" ? "White" : "Black") : (user?.username || "You")}
               </div>
             </div>
           </div>
@@ -383,8 +388,10 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
                 onClick={async () => {
                   if (!isMatchOver) {
                     if (confirm("Are you sure you want to exit? You will forfeit this match.")) {
-                      const oppName = mode === "ai" ? `Bot (Lvl ${aiLevel || 2})` : (opponent || "Unknown");
-                      await saveMatchResult(user?.uid || "", oppName, mode || "ai", "loss", history.map(h => h.san));
+                      if (history.length > 0) {
+                        const oppName = mode === "ai" ? `Bot (Lvl ${aiLevel || 2})` : (opponent || "Unknown");
+                        await saveMatchResult(user?.uid || "", oppName, mode || "ai", "loss", history.map(h => h.san));
+                      }
                       onExit();
                     }
                   } else {

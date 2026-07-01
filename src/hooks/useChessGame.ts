@@ -29,17 +29,19 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
   const handleUndoResponse = useCallback((accept: boolean) => {
     if (!socket || !roomId) return;
     if (accept) {
-      const newGame = new Chess(game.fen());
-      newGame.undo();
-      newGame.undo(); // undo both turns if needed, or just one
+      if (history.length < 2) return;
+      const newHistory = history.slice(0, -2);
+      const newGame = new Chess();
+      newHistory.forEach(h => newGame.move(h.san));
       const newFen = newGame.fen();
       socket.emit("undo_accept", roomId, newFen);
       setGame(newGame);
+      setHistory(newHistory);
     } else {
       socket.emit("undo_reject", roomId);
     }
     setUndoRequest(null);
-  }, [socket, roomId, game]);
+  }, [socket, roomId, history]);
   
   const { playMove, playCapture, playCheckmate } = useChessSounds(soundEnabled);
   
@@ -65,9 +67,9 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
   const [isEncrypted, setIsEncrypted] = useState(false);
   const [resignedBy, setResignedBy] = useState<string | null>(null);
 
-  // Initialize socket for online/local
+  // Initialize socket for online
   useEffect(() => {
-    if (mode === "online" || mode === "local") {
+    if (mode === "online") {
       const newSocket = io();
       setSocket(newSocket);
 
@@ -160,9 +162,14 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
     });
 
     socket.on("undo_accepted", (newFen: string) => {
-        const newGame = new Chess(newFen);
-        setGame(newGame);
-        setHistory(prev => prev.slice(0, -1)); // approx
+        setHistory(prev => {
+           if (prev.length < 2) return prev;
+           const newHistory = prev.slice(0, -2);
+           const newGame = new Chess();
+           newHistory.forEach(h => newGame.move(h.san));
+           setGame(newGame);
+           return newHistory;
+        });
     });
 
     socket.on("resign", (color: string) => {
@@ -210,7 +217,7 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
     if (!isMoveValid) return false;
 
     // ensure it's our turn
-    if (mode === "online" || mode === "local") {
+    if (mode === "online") {
        if (game.turn() !== playerColor) return false;
     }
 
@@ -270,15 +277,23 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
 
   const requestUndo = useCallback(() => {
      if (mode === "ai") {
-        const newGame = new Chess(game.fen());
-        newGame.undo(); // undo AI move
-        newGame.undo(); // undo our move
+        if (history.length < 2) return;
+        const newHistory = history.slice(0, -2);
+        const newGame = new Chess();
+        newHistory.forEach(h => newGame.move(h.san));
         setGame(newGame);
-        setHistory(prev => prev.slice(0, -2));
+        setHistory(newHistory);
+     } else if (mode === "local") {
+        if (history.length < 1) return;
+        const newHistory = history.slice(0, -1);
+        const newGame = new Chess();
+        newHistory.forEach(h => newGame.move(h.san));
+        setGame(newGame);
+        setHistory(newHistory);
      } else if (socket && roomId) {
         socket.emit("undo_request", roomId);
      }
-  }, [game, mode, socket, roomId]);
+  }, [history, mode, socket, roomId]);
 
   const sendMessage = useCallback(async (text: string) => {
     if (!user) return;
