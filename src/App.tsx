@@ -10,6 +10,7 @@ import { PuzzleView } from "./components/PuzzleView";
 import { SettingsModal } from "./components/SettingsModal";
 import { LoginModal } from "./components/LoginModal";
 import { ProfileModal } from "./components/ProfileModal";
+import { OnlinePlayersModal } from "./components/OnlinePlayersModal";
 import { Moon, Sun, User, Share2, Settings, Sparkles, Users, Trophy } from "lucide-react";
 import { cn } from "./lib/utils";
 import { BoardTheme, PieceStyle } from "./types";
@@ -36,7 +37,11 @@ export default function App() {
   const [aiLevel, setAiLevel] = useState<number>(2);
   const [boardTheme, setBoardTheme] = useState<BoardTheme>("green");
   const [pieceStyle, setPieceStyle] = useState<PieceStyle>("classic");
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [onlineUsersCount, setOnlineUsersCount] = useState<number>(0);
+  const [onlineUsersList, setOnlineUsersList] = useState<{id: string, username: string}[]>([]);
+  const [showOnlinePlayers, setShowOnlinePlayers] = useState(false);
+  const [globalSocket, setGlobalSocket] = useState<any>(null);
 
   useEffect(() => {
     let unsubscribeSnapshot: (() => void) | undefined;
@@ -101,14 +106,35 @@ export default function App() {
 
   useEffect(() => {
     const newSocket = io(window.location.origin);
+    setGlobalSocket(newSocket);
+    
     if (user && user.username) {
       newSocket.on("connect", () => {
         newSocket.emit("register_user", user.username);
       });
     }
-    newSocket.on("online_users", (users: string[]) => {
+    newSocket.on("online_users", (users: {id: string, username: string}[]) => {
       setOnlineUsersCount(users.length);
+      setOnlineUsersList(users);
     });
+
+    newSocket.on("receive_challenge", (data: { fromUsername: string, roomId: string }) => {
+      if (window.confirm(`${data.fromUsername} challenged you! Accept?`)) {
+         newSocket.emit("accept_challenge", { toUsername: data.fromUsername, roomId: data.roomId });
+         handleStartGame("online", data.roomId);
+      } else {
+         newSocket.emit("reject_challenge", { toUsername: data.fromUsername });
+      }
+    });
+
+    newSocket.on("challenge_accepted", (data: { roomId: string }) => {
+       handleStartGame("online", data.roomId);
+    });
+
+    newSocket.on("challenge_rejected", () => {
+       alert("Your challenge was rejected.");
+    });
+
     return () => {
       newSocket.disconnect();
     };
@@ -180,10 +206,13 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-4 md:gap-6">
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/20 dark:bg-[#1a1a1d] rounded-full border border-white/20 dark:border-white/5 shadow-sm">
+            <button 
+              onClick={() => user ? setShowOnlinePlayers(true) : setShowLogin(true)}
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/20 dark:bg-[#1a1a1d] hover:bg-white/30 dark:hover:bg-white/10 rounded-full border border-white/20 dark:border-white/5 shadow-sm transition-colors cursor-pointer"
+            >
               <Users className="w-4 h-4 text-blue-500" />
               <span className="text-xs text-gray-700 dark:text-gray-300 font-bold">{Math.max(1, onlineUsersCount)} Online</span>
-            </div>
+            </button>
             
             <div className="flex items-center gap-3">
               <button 
@@ -226,7 +255,7 @@ export default function App() {
           ) : mode === "puzzle" ? (
             <PuzzleView onExit={() => setMode(null)} darkMode={darkMode} boardTheme={boardTheme} pieceStyle={pieceStyle} />
           ) : mode ? (
-            <GameView mode={mode as any} user={user} roomId={roomId} aiLevel={aiLevel} onExit={() => setMode(null)} darkMode={darkMode} boardTheme={boardTheme} pieceStyle={pieceStyle} />
+            <GameView mode={mode as any} user={user} roomId={roomId} aiLevel={aiLevel} onExit={() => setMode(null)} darkMode={darkMode} boardTheme={boardTheme} pieceStyle={pieceStyle} soundEnabled={soundEnabled} />
           ) : (
             <HomeLobby 
               user={user} 
@@ -251,6 +280,8 @@ export default function App() {
           setBoardTheme={setBoardTheme}
           pieceStyle={pieceStyle}
           setPieceStyle={setPieceStyle}
+          soundEnabled={soundEnabled}
+          setSoundEnabled={setSoundEnabled}
           user={user}
           onLogout={handleLogout}
         />
@@ -268,6 +299,20 @@ export default function App() {
 
       {showProfile && user && (
         <ProfileModal user={user} onClose={() => setShowProfile(false)} />
+      )}
+
+      {showOnlinePlayers && user && (
+        <OnlinePlayersModal 
+          onlineUsers={onlineUsersList}
+          user={user}
+          socket={globalSocket}
+          onClose={() => setShowOnlinePlayers(false)}
+          onChallenge={(targetUsername) => {
+             const newRoomId = Math.random().toString(36).substring(2, 9);
+             globalSocket?.emit("challenge_user", { targetUsername, fromUsername: user.username, roomId: newRoomId });
+             alert(`Challenge sent to ${targetUsername}! Waiting for response...`);
+          }}
+        />
       )}
     </div>
   );

@@ -1,99 +1,131 @@
-import React, { useState } from "react";
-import { Users, X, Swords, MessageSquare, Send } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { X, Send, Swords } from "lucide-react";
+import { cn } from "../lib/utils";
+import { Socket } from "socket.io-client";
+import { PlayerInfo } from "../App";
 
 interface OnlinePlayersModalProps {
-  onlineUsers: { id: string; username: string }[];
   onClose: () => void;
-  onChallenge: (targetId: string) => void;
-  onSendMessage: (targetId: string, text: string) => void;
+  onlineUsers: {id: string, username: string}[];
+  user: PlayerInfo;
+  socket: Socket | null;
+  onChallenge: (targetUser: string) => void;
 }
 
-export const OnlinePlayersModal: React.FC<OnlinePlayersModalProps> = ({
-  onlineUsers,
-  onClose,
-  onChallenge,
-  onSendMessage
-}) => {
-  const [activeChat, setActiveChat] = useState<string | null>(null);
+export const OnlinePlayersModal: React.FC<OnlinePlayersModalProps> = ({ onClose, onlineUsers, user, socket, onChallenge }) => {
   const [chatInput, setChatInput] = useState("");
+  const [messages, setMessages] = useState<{ sender: string; text: string }[]>([]);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSend = (e: React.FormEvent, targetId: string) => {
+  useEffect(() => {
+    if (!socket) return;
+    
+    const handleGlobalChat = (msg: { sender: string; text: string }) => {
+      setMessages(prev => [...prev, msg]);
+    };
+
+    socket.on("global_chat", handleGlobalChat);
+    return () => {
+      socket.off("global_chat", handleGlobalChat);
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleChatSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (chatInput.trim()) {
-      onSendMessage(targetId, chatInput.trim());
+    if (chatInput.trim() && socket) {
+      socket.emit("global_chat", { sender: user.username, text: chatInput.trim() });
       setChatInput("");
-      setActiveChat(null); // Optional: close chat after sending, or keep it open
     }
   };
 
+  const otherUsers = onlineUsers.filter(u => u.username !== user.username);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white dark:bg-[#111115] w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden flex flex-col max-h-[80vh]">
-        <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
-          <h2 className="text-lg font-black tracking-tight flex items-center gap-2">
-            <Users className="w-5 h-5 text-blue-500" />
-            Online Players ({onlineUsers.length})
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-200 dark:hover:bg-white/10 rounded-xl transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
+      <div className="bg-white/90 dark:bg-[#111115]/90 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-2xl w-full max-w-3xl h-[70vh] shadow-2xl flex overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        
+        {/* Left Side: Players List */}
+        <div className="w-1/3 min-w-[220px] border-r border-gray-200 dark:border-white/10 flex flex-col bg-gray-50/50 dark:bg-[#0a0a0c]/50">
+          <div className="p-4 border-b border-gray-200 dark:border-white/10 flex justify-between items-center bg-white/50 dark:bg-black/50">
+            <h2 className="text-sm font-bold tracking-tight text-gray-900 dark:text-white uppercase">Online ({onlineUsers.length})</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {otherUsers.length === 0 ? (
+              <div className="text-xs text-center text-gray-500 py-4">No other players online</div>
+            ) : (
+              otherUsers.map(u => (
+                <div key={u.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-200/50 dark:hover:bg-white/5 transition-colors group">
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <div className="w-2 h-2 rounded-full bg-green-500 shrink-0"></div>
+                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{u.username}</span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      onChallenge(u.username);
+                      onClose();
+                    }}
+                    className="p-1.5 bg-blue-100 text-blue-600 hover:bg-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:hover:bg-blue-500/40 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Challenge Player"
+                  >
+                    <Swords className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))
+            )}
+            <div className="flex items-center justify-between p-2 mt-4 rounded-lg bg-gray-200/50 dark:bg-white/5 opacity-60">
+               <div className="flex items-center gap-2 overflow-hidden">
+                 <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></div>
+                 <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{user.username} (You)</span>
+               </div>
+            </div>
+          </div>
         </div>
 
-        <div className="p-4 overflow-y-auto flex-1">
-          {onlineUsers.length === 0 ? (
-            <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-              No other players are currently online.
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {onlineUsers.map(u => (
-                <div key={u.id} className="bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl p-4 flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold">{u.username}</span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setActiveChat(activeChat === u.id ? null : u.id)}
-                        className="p-2 bg-gray-200 dark:bg-white/10 hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-blue-500/20 dark:hover:text-blue-400 rounded-lg transition-colors"
-                        title="Send Message"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => onChallenge(u.id)}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
-                      >
-                        <Swords className="w-4 h-4" />
-                        Challenge
-                      </button>
-                    </div>
+        {/* Right Side: Global Chat */}
+        <div className="flex-1 flex flex-col">
+          <div className="p-4 border-b border-gray-200 dark:border-white/10 flex justify-between items-center bg-white/50 dark:bg-black/50">
+            <h2 className="text-sm font-bold tracking-tight text-gray-900 dark:text-white uppercase">Global Lobby Chat</h2>
+            <button onClick={onClose} className="p-1.5 rounded-md hover:bg-gray-200 dark:hover:bg-[#1d1d20] text-gray-500 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          
+          <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
+             {messages.length === 0 && (
+               <div className="text-center text-xs text-gray-500 my-auto">Welcome to the Global Lobby.<br/>Say hi!</div>
+             )}
+             {messages.map((m, i) => (
+                <div key={i} className={cn("flex flex-col max-w-[85%]", m.sender === user.username ? "self-end items-end" : "self-start items-start")}>
+                  <span className="text-[10px] text-gray-500 dark:text-gray-400 mb-1 px-1">{m.sender}</span>
+                  <div className={cn(
+                    "px-3 py-2 text-sm shadow-sm",
+                    m.sender === user.username 
+                      ? "bg-blue-600 text-white rounded-2xl rounded-tr-sm" 
+                      : "bg-gray-100 text-gray-900 dark:bg-[#1a1a1c] dark:text-gray-100 border border-gray-200 dark:border-[#2a2a2c] rounded-2xl rounded-tl-sm"
+                  )}>
+                    {m.text}
                   </div>
-                  
-                  {activeChat === u.id && (
-                    <form onSubmit={(e) => handleSend(e, u.id)} className="flex gap-2 mt-2">
-                      <input
-                        type="text"
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        placeholder="Type a message..."
-                        className="flex-1 bg-white dark:bg-black/50 border border-gray-300 dark:border-white/20 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
-                        autoFocus
-                      />
-                      <button
-                        type="submit"
-                        disabled={!chatInput.trim()}
-                        className="p-1.5 bg-green-600 text-white rounded-lg disabled:opacity-50 hover:bg-green-700 transition-colors"
-                      >
-                        <Send className="w-4 h-4" />
-                      </button>
-                    </form>
-                  )}
                 </div>
               ))}
-            </div>
-          )}
+              <div ref={chatEndRef} />
+          </div>
+
+          <form onSubmit={handleChatSubmit} className="p-3 border-t border-gray-200 dark:border-white/10 bg-white/50 dark:bg-black/50 flex gap-2">
+             <input 
+                type="text"
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                placeholder="Type a message..."
+                className="flex-1 bg-white dark:bg-[#0a0a0c] border border-gray-200 dark:border-[#2a2a2c] rounded-full px-4 py-2 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-500 transition-colors"
+             />
+             <button type="submit" disabled={!chatInput.trim()} className="p-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-full transition-colors flex-shrink-0">
+                <Send className="w-4 h-4 ml-0.5" />
+             </button>
+          </form>
         </div>
       </div>
     </div>

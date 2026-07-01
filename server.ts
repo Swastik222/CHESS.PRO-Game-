@@ -33,7 +33,11 @@ async function startServer() {
 
     socket.on("register_user", (username: string) => {
       onlineUsers.set(socket.id, { username, socketId: socket.id });
-      io.emit("online_users", Array.from(onlineUsers.values()).map(u => u.username));
+      io.emit("online_users", Array.from(onlineUsers.values()).map(u => ({ id: u.socketId, username: u.username })));
+    });
+
+    socket.on("global_chat", (message: { sender: string, text: string }) => {
+      io.emit("global_chat", message);
     });
 
     socket.on("challenge_user", (data: { targetUsername: string, fromUsername: string, roomId: string }) => {
@@ -155,7 +159,7 @@ async function startServer() {
       console.log("Client disconnected:", socket.id);
       if (onlineUsers.has(socket.id)) {
         onlineUsers.delete(socket.id);
-        io.emit("online_users", Array.from(onlineUsers.values()).map(u => u.username));
+        io.emit("online_users", Array.from(onlineUsers.values()).map(u => ({ id: u.socketId, username: u.username })));
       }
     });
   });

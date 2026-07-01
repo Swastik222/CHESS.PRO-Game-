@@ -20,6 +20,7 @@ interface GameViewProps {
   darkMode?: boolean;
   boardTheme?: BoardTheme;
   pieceStyle?: PieceStyle;
+  soundEnabled?: boolean;
 }
 
 export const THEME_COLORS: Record<BoardTheme, { light: string; dark: string }> = {
@@ -31,7 +32,7 @@ export const THEME_COLORS: Record<BoardTheme, { light: string; dark: string }> =
   wood: { light: "#e6d3a8", dark: "#a87b4f" }
 };
 
-export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true, boardTheme = "green", pieceStyle = "classic" }: GameViewProps) {
+export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true, boardTheme = "green", pieceStyle = "classic", soundEnabled = true }: GameViewProps) {
   const {
     game,
     opponent,
@@ -46,7 +47,7 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
     requestUndo,
     sendMessage,
     resignMatch
-  } = useChessGame(mode || "ai", user, roomId, aiLevel);
+  } = useChessGame(mode || "ai", user, roomId, aiLevel, soundEnabled);
 
   const [chatInput, setChatInput] = useState("");
   const [moveFrom, setMoveFrom] = useState<string | null>(null);

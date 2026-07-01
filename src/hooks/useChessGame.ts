@@ -3,6 +3,7 @@ import { Chess, Move } from "chess.js";
 import { io, Socket } from "socket.io-client";
 import { CryptoManager } from "../lib/crypto";
 import { getBestMove, getMoveGrade, calculateAccuracy } from "../lib/engine";
+import { useChessSounds } from "./useChessSounds";
 
 export type GameMode = "ai" | "local" | "online" | "puzzle";
 
@@ -16,7 +17,7 @@ export interface MoveHistory {
   grade: string;
 }
 
-export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: string, aiLevel: number = 2) {
+export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: string, aiLevel: number = 2, soundEnabled: boolean = true) {
   const [game, setGame] = useState(new Chess());
   const [socket, setSocket] = useState<Socket | null>(null);
   const [opponent, setOpponent] = useState<string | null>(mode === "ai" ? `Bot Level ${aiLevel}` : null);
@@ -24,6 +25,21 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
   const [messages, setMessages] = useState<{ sender: string; text: string; id: string }[]>([]);
   const [history, setHistory] = useState<MoveHistory[]>([]);
   
+  const { playMove, playCapture, playCheckmate } = useChessSounds(soundEnabled);
+  
+  useEffect(() => {
+    if (history.length > 0) {
+      const lastMove = history[history.length - 1].san;
+      if (lastMove.includes('#')) {
+        playCheckmate();
+      } else if (lastMove.includes('x')) {
+        playCapture();
+      } else {
+        playMove();
+      }
+    }
+  }, [history, playMove, playCapture, playCheckmate]);
+
   // Timers
   const [wTime, setWTime] = useState(600); // 10 mins
   const [bTime, setBTime] = useState(600);

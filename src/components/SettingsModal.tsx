@@ -1,5 +1,5 @@
 import React from "react";
-import { X, LogOut } from "lucide-react";
+import { X, LogOut, Volume2, VolumeX } from "lucide-react";
 import { cn } from "../lib/utils";
 import { BoardTheme, PieceStyle } from "../types";
 
@@ -9,11 +9,13 @@ interface SettingsModalProps {
   setBoardTheme: (theme: BoardTheme) => void;
   pieceStyle: PieceStyle;
   setPieceStyle: (style: PieceStyle) => void;
+  soundEnabled?: boolean;
+  setSoundEnabled?: (enabled: boolean) => void;
   user?: any;
   onLogout?: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, boardTheme, setBoardTheme, pieceStyle, setPieceStyle, user, onLogout }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, boardTheme, setBoardTheme, pieceStyle, setPieceStyle, soundEnabled = true, setSoundEnabled, user, onLogout }) => {
   const themes: { id: BoardTheme; name: string; colors: string[] }[] = [
     { id: "classic", name: "Classic", colors: ["#f0d9b5", "#b58863"] },
     { id: "green", name: "Green", colors: ["#ffffdd", "#86a666"] },
@@ -83,6 +85,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, boardThem
               ))}
             </div>
           </section>
+
+          {setSoundEnabled && (
+            <section>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-widest">Sound Effects</h3>
+                <button 
+                  onClick={() => setSoundEnabled(!soundEnabled)}
+                  className={cn(
+                    "p-2 rounded-lg transition-colors border",
+                    soundEnabled ? "bg-blue-100 text-blue-600 border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/30" : "bg-gray-100 text-gray-500 border-gray-200 dark:bg-[#1d1d20] dark:text-gray-400 dark:border-[#2a2a2c]"
+                  )}
+                >
+                  {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                </button>
+              </div>
+            </section>
+          )}
 
           {user && onLogout && (
             <section className="pt-4 border-t border-gray-200 dark:border-[#2a2a2c]">
