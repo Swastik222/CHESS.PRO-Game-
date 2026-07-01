@@ -5,7 +5,7 @@ import { ArrowLeft, CheckCircle, XCircle, Lightbulb } from "lucide-react";
 import { dailyPuzzles, Puzzle } from "../data/puzzles";
 import { BoardTheme, PieceStyle } from "../types";
 import { THEME_COLORS } from "./GameView";
-import { getCustomPieces } from "../lib/pieces";
+import { getCustomPieces, getPieceIdMapping } from "../lib/pieces";
 
 export function PuzzleView({ onExit, darkMode = true, boardTheme = "green", pieceStyle = "classic" }: { onExit: () => void; darkMode?: boolean; boardTheme?: BoardTheme; pieceStyle?: PieceStyle }) {
   const [currentPuzzle, setCurrentPuzzle] = useState<Puzzle | null>(null);
@@ -29,6 +29,11 @@ export function PuzzleView({ onExit, darkMode = true, boardTheme = "green", piec
     const fenParts = currentPuzzle.fen.split(" ");
     return fenParts[1] === "w" ? "white" : "black";
   }, [currentPuzzle]);
+
+  const pieceMapping = useMemo(() => {
+    if (!currentPuzzle) return {};
+    return getPieceIdMapping(currentPuzzle.fen, currentPuzzle.moves.slice(0, moveIndex));
+  }, [currentPuzzle, moveIndex]);
 
   function onDrop({ sourceSquare, targetSquare, piece }: any) {
     if (status !== "playing" || !currentPuzzle) return false;
@@ -141,8 +146,8 @@ export function PuzzleView({ onExit, darkMode = true, boardTheme = "green", piec
               boardOrientation: playerColor,
               darkSquareStyle: { backgroundColor: THEME_COLORS[boardTheme].dark },
               lightSquareStyle: { backgroundColor: THEME_COLORS[boardTheme].light },
-              pieces: getCustomPieces(pieceStyle),
-              animationDurationInMs: 200,
+              pieces: getCustomPieces(pieceStyle, pieceMapping),
+              animationDurationInMs: 0,
               squareStyles: hintSquare ? {
                 [hintSquare]: { backgroundColor: "rgba(255, 255, 0, 0.4)" }
               } : undefined

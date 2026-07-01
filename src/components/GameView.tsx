@@ -4,11 +4,12 @@ import { GameMode, PlayerInfo } from "../App";
 import { useChessGame } from "../hooks/useChessGame";
 import { Copy, LogOut, Send, ShieldCheck, Clock, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Bot, Users, User } from "lucide-react";
 import { cn } from "../lib/utils";
+import { motion } from "motion/react";
 import { calculateAccuracy, getCalibratedAccuracies, getPerformanceRating } from "../lib/engine";
 import { Chess } from "chess.js";
 
 import { BoardTheme, PieceStyle } from "../types";
-import { getCustomPieces } from "../lib/pieces";
+import { getCustomPieces, getPieceIdMapping } from "../lib/pieces";
 import { saveMatchResult } from "../lib/firebase";
 
 interface GameViewProps {
@@ -43,6 +44,7 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
     history,
     isEncrypted,
     resignedBy,
+    timeoutColor,
     undoRequest,
     handleUndoResponse,
     makeMove,
@@ -55,11 +57,19 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
   const [optionSquares, setOptionSquares] = useState<Record<string, any>>({});
 
+  interface CaptureEffect {
+    id: string;
+    square: string;
+    top: number;
+    left: number;
+  }
+  const [captureEffects, setCaptureEffects] = useState<CaptureEffect[]>([]);
+
   const [showResultModal, setShowResultModal] = useState(true);
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
   const matchLogged = React.useRef(false);
 
-  const isMatchOver = game.isGameOver() || !!resignedBy;
+  const isMatchOver = game.isGameOver() || !!resignedBy || !!timeoutColor;
   const currentReviewIndex = reviewIndex !== null ? reviewIndex : history.length;
 
   React.useEffect(() => {
@@ -74,6 +84,8 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
       
       if (resignedBy) {
         result = resignedBy === playerColor ? "loss" : "win";
+      } else if (timeoutColor) {
+        result = timeoutColor === playerColor ? "loss" : "win";
       } else if (game.isCheckmate()) {
         result = game.turn() === playerColor ? "loss" : "win";
       } else if (game.isDraw() || game.isStalemate() || game.isThreefoldRepetition() || game.isInsufficientMaterial()) {
@@ -83,7 +95,48 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
       const oppName = mode === "ai" ? `Bot (Lvl ${aiLevel || 2})` : (opponent || "Unknown");
       saveMatchResult(user.uid, oppName, mode || "ai", result, history.map(h => h.san));
     }
-  }, [isMatchOver, user, playerColor, resignedBy, game, mode, opponent, history]);
+  }, [isMatchOver, user, playerColor, resignedBy, timeoutColor, game, mode, opponent, history]);
+
+  // Trigger capture animation when a move contains "x"
+  React.useEffect(() => {
+    if (history.length === 0 || currentReviewIndex !== history.length) return;
+    const latestMove = history[history.length - 1];
+    if (latestMove && latestMove.san && latestMove.san.includes('x')) {
+      const match = latestMove.san.match(/[a-h][1-8]/);
+      if (match) {
+        const square = match[0];
+        const file = square[0];
+        const rank = parseInt(square[1]);
+        
+        const orientation = mode === "local" ? (game.turn() === "w" ? "white" : "black") : (playerColor === "w" ? "white" : "black");
+        
+        let col = file.charCodeAt(0) - 97;
+        let row = 8 - rank;
+        
+        if (orientation === "black") {
+          col = 7 - col;
+          row = rank - 1;
+        }
+        
+        const left = ((col + 0.5) / 8) * 100;
+        const top = ((row + 0.5) / 8) * 100;
+        
+        const newEffect: CaptureEffect = {
+          id: `${square}_${Date.now()}_${Math.random()}`,
+          square,
+          top,
+          left
+        };
+        
+        setCaptureEffects(prev => [...prev, newEffect]);
+        
+        // Remove after 1 second
+        setTimeout(() => {
+          setCaptureEffects(prev => prev.filter(e => e.id !== newEffect.id));
+        }, 1000);
+      }
+    }
+  }, [history.length, mode, playerColor, game, currentReviewIndex]);
 
   const reviewFen = React.useMemo(() => {
     if (!isMatchOver) return game.fen();
@@ -95,6 +148,12 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
     }
     return tempGame.fen();
   }, [isMatchOver, currentReviewIndex, game, history]);
+
+  const pieceMapping = React.useMemo(() => {
+    const startingFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    const movesList = history.slice(0, currentReviewIndex).map(h => h.san);
+    return getPieceIdMapping(startingFen, movesList);
+  }, [history, currentReviewIndex]);
 
   function getMoveOptions(square: string) {
     const moves = game.moves({
@@ -306,11 +365,53 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
               boardOrientation: mode === "local" ? (game.turn() === "w" ? "white" : "black") : (playerColor === "w" ? "white" : "black"),
               darkSquareStyle: { backgroundColor: THEME_COLORS[boardTheme].dark },
               lightSquareStyle: { backgroundColor: THEME_COLORS[boardTheme].light },
-              pieces: getCustomPieces(pieceStyle),
-              animationDurationInMs: 200,
+              pieces: getCustomPieces(pieceStyle, pieceMapping),
+              animationDurationInMs: 0,
               squareStyles: optionSquares
             }}
           />
+
+          {/* Subtle capture animation effects */}
+          {captureEffects.map((effect) => (
+            <div
+              key={effect.id}
+              className="absolute pointer-events-none"
+              style={{
+                left: `${effect.left}%`,
+                top: `${effect.top}%`,
+                transform: "translate(-50%, -50%)",
+                zIndex: 40,
+              }}
+            >
+              {/* Concentric expanding ripple ring */}
+              <motion.div
+                initial={{ scale: 0.3, opacity: 1, border: "2px solid rgba(239, 68, 68, 0.8)" }}
+                animate={{ scale: 1.8, opacity: 0, border: "1px solid rgba(239, 68, 68, 0)" }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                className="absolute rounded-full"
+                style={{ width: "60px", height: "60px", marginLeft: "-30px", marginTop: "-30px" }}
+              />
+              
+              {/* Dynamic splash particles */}
+              {[...Array(6)].map((_, i) => {
+                const angle = (i * 60 * Math.PI) / 180;
+                const distance = 25 + Math.random() * 15;
+                const targetX = Math.cos(angle) * distance;
+                const targetY = Math.sin(angle) * distance;
+                
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ x: 0, y: 0, scale: 1, opacity: 0.9 }}
+                    animate={{ x: targetX, y: targetY, scale: 0, opacity: 0 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    className="absolute w-2 h-2 bg-red-500 rounded-full"
+                    style={{ marginLeft: "-4px", marginTop: "-4px" }}
+                  />
+                );
+              })}
+            </div>
+          ))}
         </div>
 
         <div className="w-full max-w-[600px] flex justify-between items-start mt-2 px-1">
@@ -507,21 +608,25 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
       </aside>
 
       {/* Match Over Modal */}
-      {(game.isGameOver() || resignedBy) && showResultModal && (
+      {(game.isGameOver() || resignedBy || timeoutColor) && showResultModal && (
         <div className="fixed inset-0 z-50 bg-[#000000]/40 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white/80 dark:bg-black/80 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl transition-colors">
             <div className="p-6 border-b border-white/20 dark:border-white/10 text-center shrink-0 transition-colors">
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
                 {resignedBy 
                   ? "Resignation" 
-                  : game.isCheckmate() ? "Checkmate!" : game.isDraw() ? "Draw!" : "Match Over!"}
+                  : timeoutColor
+                    ? "Timeout!"
+                    : game.isCheckmate() ? "Checkmate!" : game.isDraw() ? "Draw!" : "Match Over!"}
               </h2>
               <p className="text-gray-500 dark:text-[#a1a1a5]">
                 {resignedBy
                   ? `${resignedBy === 'w' ? 'Black' : 'White'} wins the match.`
-                  : game.isCheckmate() 
-                    ? `${game.turn() === 'w' ? 'Black' : 'White'} wins the match.` 
-                    : "The match ended in a draw."}
+                  : timeoutColor
+                    ? `${timeoutColor === 'w' ? 'Black' : 'White'} wins on time.`
+                    : game.isCheckmate() 
+                      ? `${game.turn() === 'w' ? 'Black' : 'White'} wins the match.` 
+                      : "The match ended in a draw."}
               </p>
             </div>
 
@@ -529,9 +634,11 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
               {(() => {
                 const matchResult: "win" | "loss" | "draw" = resignedBy 
                   ? (resignedBy === playerColor ? "loss" : "win")
-                  : game.isCheckmate()
-                    ? (game.turn() === playerColor ? "loss" : "win")
-                    : "draw";
+                  : timeoutColor
+                    ? (timeoutColor === playerColor ? "loss" : "win")
+                    : game.isCheckmate()
+                      ? (game.turn() === playerColor ? "loss" : "win")
+                      : "draw";
 
                 const botRating = aiLevel === 1 ? 800 : aiLevel === 2 ? 1200 : aiLevel === 3 ? 1600 : 2000;
                 const baseOpponentRating = mode === "ai" ? botRating : 1500;
@@ -554,8 +661,8 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
                 const pValid = pMoves.filter(m => m.grade && m.grade !== "..." && m.grade !== "").length;
                 const oValid = oMoves.filter(m => m.grade && m.grade !== "..." && m.grade !== "").length;
                 
-                const pBestExcellent = pMoves.filter(m => m.grade === "Best" || m.grade === "Excellent").length;
-                const oBestExcellent = oMoves.filter(m => m.grade === "Best" || m.grade === "Excellent").length;
+                const pBestExcellent = pMoves.filter(m => ["Brilliant", "Great Move", "Best", "Excellent", "Book", "Forced"].includes(m.grade)).length;
+                const oBestExcellent = oMoves.filter(m => ["Brilliant", "Great Move", "Best", "Excellent", "Book", "Forced"].includes(m.grade)).length;
                 
                 const playerMatchRate = pValid > 0 ? Math.round((pBestExcellent / pValid) * 100) : 0;
                 const opponentMatchRate = oValid > 0 ? Math.round((oBestExcellent / oValid) * 100) : 0;
@@ -603,8 +710,12 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
                       </div>
 
                       {[
-                        { name: "Excellent", desc: "Very high quality", countKey: "Excellent", color: "text-green-600 dark:text-green-400 font-bold" },
+                        { name: "Brilliant", desc: "Sacrifice that improves or maintains your position", countKey: "Brilliant", color: "text-teal-600 dark:text-teal-400 font-bold" },
+                        { name: "Great Move", desc: "An outstanding and critical only-move", countKey: "Great Move", color: "text-sky-600 dark:text-sky-400 font-bold" },
+                        { name: "Excellent", desc: "Very high quality move", countKey: "Excellent", color: "text-green-600 dark:text-green-400 font-bold" },
                         { name: "Best", desc: "Top choice / Engine prediction", countKey: "Best", color: "text-green-500 dark:text-green-300 font-semibold" },
+                        { name: "Book", desc: "Standard opening theory move", countKey: "Book", color: "text-amber-700 dark:text-amber-400" },
+                        { name: "Forced", desc: "The only legal move available", countKey: "Forced", color: "text-gray-500 dark:text-gray-400" },
                         { name: "Good", desc: "Solid developing move", countKey: "Good", color: "text-blue-500 dark:text-blue-400" },
                         { name: "Inaccuracy", desc: "Slightly suboptimal", countKey: "Inaccuracy", color: "text-yellow-600 dark:text-yellow-400" },
                         { name: "Mistake", desc: "Gives up some advantage", countKey: "Mistake", color: "text-orange-500 dark:text-orange-400" },
@@ -648,12 +759,17 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
                         <span className="text-gray-900 dark:text-white">{pair[0]?.san}</span>
                         {pair[0]?.grade && (
                           <span className={cn("text-[10px] px-2 py-0.5 rounded font-bold", 
+                            pair[0].grade === "Brilliant" ? "bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-500/30" :
+                            pair[0].grade === "Great Move" ? "bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-500/30" :
                             pair[0].grade === "Best" ? "bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400" :
-                            pair[0].grade === "Excellent" ? "bg-green-100 dark:bg-green-400/20 text-green-600 dark:text-green-300" :
+                            pair[0].grade === "Excellent" ? "bg-green-100 dark:bg-green-400/20 text-green-600 dark:text-green-300 font-bold" :
+                            pair[0].grade === "Book" ? "bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300" :
+                            pair[0].grade === "Forced" ? "bg-gray-100 dark:bg-gray-500/20 text-gray-700 dark:text-gray-300" :
                             pair[0].grade === "Good" ? "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400" :
                             pair[0].grade === "Inaccuracy" ? "bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400" :
                             pair[0].grade === "Mistake" ? "bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400" :
-                            "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400"
+                            pair[0].grade === "Blunder" ? "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 font-bold border border-red-200 dark:border-red-500/30" :
+                            "bg-gray-100 dark:bg-gray-500/10 text-gray-600 dark:text-gray-400"
                           )}>
                             {pair[0].grade}
                           </span>
@@ -665,12 +781,17 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
                             <span className="text-gray-900 dark:text-white">{pair[1]?.san}</span>
                             {pair[1]?.grade && (
                               <span className={cn("text-[10px] px-2 py-0.5 rounded font-bold", 
+                                pair[1].grade === "Brilliant" ? "bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-500/30" :
+                                pair[1].grade === "Great Move" ? "bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-500/30" :
                                 pair[1].grade === "Best" ? "bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400" :
-                                pair[1].grade === "Excellent" ? "bg-green-100 dark:bg-green-400/20 text-green-600 dark:text-green-300" :
+                                pair[1].grade === "Excellent" ? "bg-green-100 dark:bg-green-400/20 text-green-600 dark:text-green-300 font-bold" :
+                                pair[1].grade === "Book" ? "bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300" :
+                                pair[1].grade === "Forced" ? "bg-gray-100 dark:bg-gray-500/20 text-gray-700 dark:text-gray-300" :
                                 pair[1].grade === "Good" ? "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400" :
                                 pair[1].grade === "Inaccuracy" ? "bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400" :
                                 pair[1].grade === "Mistake" ? "bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400" :
-                                "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400"
+                                pair[1].grade === "Blunder" ? "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 font-bold border border-red-200 dark:border-red-500/30" :
+                                "bg-gray-100 dark:bg-gray-500/10 text-gray-600 dark:text-gray-400"
                               )}>
                                 {pair[1].grade}
                               </span>

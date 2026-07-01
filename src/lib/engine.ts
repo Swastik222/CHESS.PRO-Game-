@@ -4,30 +4,152 @@ const pieceValues: Record<string, number> = {
   p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000,
 };
 
-const centerBonus = [
-  [-20,-10,-10,-10,-10,-10,-10,-20],
-  [-10,  0,  0,  0,  0,  0,  0,-10],
-  [-10,  0,  5, 10, 10,  5,  0,-10],
-  [-10,  0, 10, 20, 20, 10,  0,-10],
-  [-10,  0, 10, 20, 20, 10,  0,-10],
-  [-10,  0,  5, 10, 10,  5,  0,-10],
-  [-10,  0,  0,  0,  0,  0,  0,-10],
-  [-20,-10,-10,-10,-10,-10,-10,-20],
+// Advanced Piece-Square Tables (PST) for White, mirrored for Black
+const pawnPST = [
+  [  0,  0,  0,  0,  0,  0,  0,  0],
+  [ 50, 50, 50, 50, 50, 50, 50, 50],
+  [ 10, 10, 20, 30, 30, 20, 10, 10],
+  [  5,  5, 10, 25, 25, 10,  5,  5],
+  [  0,  0,  0, 20, 20,  0,  0,  0],
+  [  5, -5,-10,  0,  0,-10, -5,  5],
+  [  5, 10, 10,-20,-20, 10, 10,  5],
+  [  0,  0,  0,  0,  0,  0,  0,  0]
 ];
 
-export function evaluateBoard(game: Chess): number {
-  let totalEvaluation = 0;
+const knightPST = [
+  [-50,-40,-30,-30,-30,-30,-40,-50],
+  [-40,-20,  0,  0,  0,  0,-20,-40],
+  [-30,  0, 10, 15, 15, 10,  0,-30],
+  [-30,  5, 15, 20, 20, 15,  5,-30],
+  [-30,  0, 15, 20, 20, 15,  0,-30],
+  [-30,  5, 10, 15, 15, 10,  5,-30],
+  [-40,-20,  0,  5,  5,  0,-20,-40],
+  [-50,-40,-30,-30,-30,-30,-40,-50]
+];
+
+const bishopPST = [
+  [-20,-10,-10,-10,-10,-10,-10,-20],
+  [-10,  0,  0,  0,  0,  0,  0,-10],
+  [-10,  0,  5, 10, 10,  5,  0,-10],
+  [-10,  5,  5, 10, 10,  5,  5,-10],
+  [-10,  0, 10, 10, 10, 10,  0,-10],
+  [-10, 10, 10, 10, 10, 10, 10,-10],
+  [-10,  5,  0,  0,  0,  0,  5,-10],
+  [-20,-10,-10,-10,-10,-10,-10,-20]
+];
+
+const rookPST = [
+  [  0,  0,  0,  0,  0,  0,  0,  0],
+  [  5, 10, 10, 10, 10, 10, 10,  5],
+  [ -5,  0,  0,  0,  0,  0,  0, -5],
+  [ -5,  0,  0,  0,  0,  0,  0, -5],
+  [ -5,  0,  0,  0,  0,  0,  0, -5],
+  [ -5,  0,  0,  0,  0,  0,  0, -5],
+  [ -5,  0,  0,  0,  0,  0,  0, -5],
+  [  0,  0,  0,  5,  5,  0,  0,  0]
+];
+
+const queenPST = [
+  [-20,-10,-10, -5, -5,-10,-10,-20],
+  [-10,  0,  0,  0,  0,  0,  0,-10],
+  [-10,  0,  5,  5,  5,  5,  0,-10],
+  [ -5,  0,  5,  5,  5,  5,  0,  -5],
+  [  0,  0,  5,  5,  5,  5,  0,   0],
+  [-10,  5,  5,  5,  5,  5,  5,-10],
+  [-10,  0,  5,  0,  0,  5,  0,-10],
+  [-20,-10,-10, -5, -5,-10,-10,-20]
+];
+
+const kingPST = [
+  [-30,-40,-40,-50,-50,-40,-40,-30],
+  [-30,-40,-40,-50,-50,-40,-40,-30],
+  [-30,-40,-40,-50,-50,-40,-40,-30],
+  [-30,-40,-40,-50,-50,-40,-40,-30],
+  [-20,-30,-30,-40,-40,-30,-30,-20],
+  [-10,-20,-20,-20,-20,-20,-20,-10],
+  [ 20, 20,  0,  0,  0,  0, 20, 20],
+  [ 20, 30, 10,  0,  0, 10, 30, 20]
+];
+
+const kingEndgamePST = [
+  [-50,-40,-30,-20,-20,-30,-40,-50],
+  [-30,-20,-10,  0,  0,-10,-20,-30],
+  [-30,-10, 20, 30, 30, 20,-10,-30],
+  [-30,-10, 30, 40, 40, 30,-10,-30],
+  [-30,-10, 30, 40, 40, 30,-10,-30],
+  [-30,-10, 20, 30, 30, 20,-10,-30],
+  [-30,-30,  0,  0,  0,  0,-30,-30],
+  [-50,-30,-30,-30,-30,-30,-30,-50]
+];
+
+function isEndgame(game: Chess): boolean {
+  let whitePiecesMaterial = 0;
+  let blackPiecesMaterial = 0;
+  let hasWhiteQueen = false;
+  let hasBlackQueen = false;
+  
   const board = game.board();
-  for (let i = 0; i < 8; i++) {
-    for (let j = 0; j < 8; j++) {
-      const piece = board[i][j];
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
       if (piece) {
-        const val = pieceValues[piece.type] + centerBonus[i][j];
-        totalEvaluation += piece.color === 'w' ? val : -val;
+        if (piece.type === 'q') {
+          if (piece.color === 'w') hasWhiteQueen = true;
+          else hasBlackQueen = true;
+        } else if (piece.type !== 'k') {
+          const val = pieceValues[piece.type];
+          if (piece.color === 'w') whitePiecesMaterial += val;
+          else blackPiecesMaterial += val;
+        }
       }
     }
   }
-  return totalEvaluation;
+  
+  if (!hasWhiteQueen && !hasBlackQueen) return true;
+  if (hasWhiteQueen && whitePiecesMaterial <= 1300 && !hasBlackQueen) return true;
+  if (hasBlackQueen && blackPiecesMaterial <= 1300 && !hasWhiteQueen) return true;
+  if (hasWhiteQueen && hasBlackQueen && whitePiecesMaterial <= 900 && blackPiecesMaterial <= 900) return true;
+  
+  return false;
+}
+
+export function evaluateBoard(game: Chess): number {
+  let score = 0;
+  const board = game.board();
+  const endgame = isEndgame(game);
+  
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      if (piece) {
+        const pieceVal = pieceValues[piece.type];
+        let psqtBonus = 0;
+        
+        // Mirror files/ranks as appropriate for Black
+        const pr = piece.color === 'w' ? r : 7 - r;
+        const pc = c;
+        
+        if (piece.type === 'p') {
+          psqtBonus = pawnPST[pr][pc];
+        } else if (piece.type === 'n') {
+          psqtBonus = knightPST[pr][pc];
+        } else if (piece.type === 'b') {
+          psqtBonus = bishopPST[pr][pc];
+        } else if (piece.type === 'r') {
+          psqtBonus = rookPST[pr][pc];
+        } else if (piece.type === 'q') {
+          psqtBonus = queenPST[pr][pc];
+        } else if (piece.type === 'k') {
+          psqtBonus = endgame ? kingEndgamePST[pr][pc] : kingPST[pr][pc];
+        }
+        
+        const total = pieceVal + psqtBonus;
+        score += piece.color === 'w' ? total : -total;
+      }
+    }
+  }
+  
+  return score;
 }
 
 const tt = new Map<string, { depth: number; score: number; flag: number }>();
@@ -110,7 +232,7 @@ export function minimax(game: Chess, depth: number, alpha: number, beta: number,
   return bestVal;
 }
 
-export function getBestMove(game: Chess, depth: number): { move: string, score: number } {
+export function getBestMove(game: Chess, depth: number): { move: string, score: number, allEvaluations?: { move: string, score: number }[] } {
   const moves = game.moves({ verbose: true });
   if (moves.length === 0) return { move: "", score: 0 };
 
@@ -128,11 +250,14 @@ export function getBestMove(game: Chess, depth: number): { move: string, score: 
   let bestScore = rootIsWhite ? -Infinity : Infinity;
   let alpha = -Infinity;
   let beta = Infinity;
+  const allEvaluations: { move: string, score: number }[] = [];
 
   for (const move of moves) {
     game.move(move.san);
     const score = minimax(game, depth - 1, alpha, beta, !rootIsWhite);
     game.undo();
+
+    allEvaluations.push({ move: move.san, score });
 
     if (rootIsWhite) {
       if (score > bestScore) {
@@ -155,7 +280,7 @@ export function getBestMove(game: Chess, depth: number): { move: string, score: 
 
   // Pick a random move among the equal-scoring best moves to add natural variety
   const bestMove = bestMoves[Math.floor(Math.random() * bestMoves.length)] || moves[0].san;
-  return { move: bestMove, score: bestScore };
+  return { move: bestMove, score: bestScore, allEvaluations };
 }
 
 // Helper to convert centipawn score to winning probability for White
@@ -164,19 +289,112 @@ export function getWinProbability(score: number): number {
   return 1 / (1 + Math.pow(10, -score / 400));
 }
 
-export function getMoveGrade(scoreBefore: number, scoreAfter: number, isWhite: boolean): string {
+export function getMaterialValue(game: Chess, color: 'w' | 'b'): number {
+  let value = 0;
+  const board = game.board();
+  for (const row of board) {
+    for (const piece of row) {
+      if (piece && piece.color === color) {
+        if (piece.type === 'p') value += 1;
+        else if (piece.type === 'n') value += 3;
+        else if (piece.type === 'b') value += 3;
+        else if (piece.type === 'r') value += 5;
+        else if (piece.type === 'q') value += 9;
+      }
+    }
+  }
+  return value;
+}
+
+export interface MoveGradeContext {
+  numLegalMoves?: number;
+  san?: string;
+  allEvaluations?: { move: string; score: number }[];
+  historyLength?: number;
+  boardBeforeFen?: string;
+  boardAfterReplyFen?: string;
+}
+
+export function getMoveGrade(
+  scoreBefore: number,
+  scoreAfter: number,
+  isWhite: boolean,
+  context?: MoveGradeContext
+): string {
   const pBefore = isWhite ? getWinProbability(scoreBefore) : (1 - getWinProbability(scoreBefore));
   const pAfter = isWhite ? getWinProbability(scoreAfter) : (1 - getWinProbability(scoreAfter));
   
   // Loss in win probability
   const deltaP = pBefore - pAfter;
   
+  // 1. Forced Move
+  if (context?.numLegalMoves === 1) {
+    return "Forced";
+  }
+
+  // 2. Book Move
+  if (context?.historyLength !== undefined && context.historyLength <= 8 && context.san) {
+    const isCommonMove = isWhite
+      ? ["e4", "d4", "Nf3", "c4", "g3", "Nc3"].includes(context.san)
+      : ["e5", "c5", "Nf6", "e6", "d5", "g6", "c6", "d6", "Nc6"].includes(context.san);
+    if (isCommonMove && deltaP <= 0.03) {
+      return "Book";
+    }
+  }
+
+  // 3. Brilliant Move (!!)
+  if (
+    context?.boardBeforeFen &&
+    context?.boardAfterReplyFen &&
+    deltaP <= 0.04 &&
+    pAfter >= 0.40
+  ) {
+    try {
+      const gameBefore = new Chess(context.boardBeforeFen);
+      const gameAfterReply = new Chess(context.boardAfterReplyFen);
+      const playerColor = isWhite ? 'w' : 'b';
+      const opponentColor = isWhite ? 'b' : 'w';
+
+      const matPlayerBefore = getMaterialValue(gameBefore, playerColor);
+      const matOpponentBefore = getMaterialValue(gameBefore, opponentColor);
+      const matPlayerAfter = getMaterialValue(gameAfterReply, playerColor);
+      const matOpponentAfter = getMaterialValue(gameAfterReply, opponentColor);
+
+      const balBefore = matPlayerBefore - matOpponentBefore;
+      const balAfter = matPlayerAfter - matOpponentAfter;
+
+      if (balAfter < balBefore) {
+        return "Brilliant";
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // 4. Great Move (!)
+  if (context?.allEvaluations && context.allEvaluations.length >= 2 && deltaP <= 0.02) {
+    const evals = [...context.allEvaluations];
+    evals.sort((a, b) => {
+      return isWhite ? b.score - a.score : a.score - b.score;
+    });
+
+    const bestScore = evals[0].score;
+    const secondBestScore = evals[1].score;
+
+    const pBest = isWhite ? getWinProbability(bestScore) : (1 - getWinProbability(bestScore));
+    const pSecondBest = isWhite ? getWinProbability(secondBestScore) : (1 - getWinProbability(secondBestScore));
+
+    if (pBest - pSecondBest >= 0.12 && pBest >= 0.45) {
+      return "Great Move";
+    }
+  }
+
   if (deltaP <= 0.02) return "Best";       // Lost <= 2% win probability (matches engine prediction)
   if (deltaP <= 0.06) return "Excellent";  // Lost <= 6%
-  if (deltaP <= 0.15) return "Good";       // Lost <= 15%
-  if (deltaP <= 0.25) return "Inaccuracy"; // Lost <= 25%
-  if (deltaP <= 0.40) return "Mistake";    // Lost <= 40%
-  return "Blunder";                        // Lost > 40% (critical mistake)
+  if (deltaP <= 0.13) return "Good";       // Lost <= 13%
+  if (deltaP <= 0.23) return "Inaccuracy"; // Lost <= 23%
+  if (deltaP <= 0.38) return "Mistake";    // Lost <= 38%
+  return "Blunder";                        // Lost > 38% (critical mistake)
 }
 
 export function calculateAccuracy(grades: string[]): number {
@@ -184,15 +402,19 @@ export function calculateAccuracy(grades: string[]): number {
   if (validGrades.length === 0) return 100;
   
   const weights: Record<string, number> = {
+    "Brilliant": 100,
+    "Great Move": 100,
     "Excellent": 100,
     "Best": 95,
+    "Book": 100,
+    "Forced": 100,
     "Good": 75,
     "Inaccuracy": 50,
     "Mistake": 20,
     "Blunder": 0
   };
   
-  const total = validGrades.reduce((acc, g) => acc + (weights[g] || 0), 0);
+  const total = validGrades.reduce((acc, g) => acc + (weights[g] !== undefined ? weights[g] : 75), 0);
   return Math.round(total / validGrades.length);
 }
 
@@ -232,13 +454,13 @@ export function getCalibratedAccuracies(
     if (result === "win") {
       // If player won, the bot's accuracy MUST be lower than player's to reflect the loss
       if (opponentAcc >= playerAcc) {
-        opponentAcc = Math.max(30, playerAcc - Math.round(Math.random() * 4 + 4));
+        opponentAcc = Math.max(30, playerAcc - 6);
       }
       playerAcc = Math.min(100, playerAcc + 2);
     } else if (result === "loss") {
       // If player lost, the player's accuracy should be lower than bot's
       if (playerAcc >= opponentAcc) {
-        playerAcc = Math.max(30, opponentAcc - Math.round(Math.random() * 4 + 4));
+        playerAcc = Math.max(30, opponentAcc - 6);
       }
     }
   } else {

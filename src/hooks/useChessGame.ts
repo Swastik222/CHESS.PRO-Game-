@@ -45,21 +45,6 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
   }, [socket, roomId, history]);
   
   const { playMove, playCapture, playCheckmate } = useChessSounds(soundEnabled);
-  const lastHistoryLengthRef = useRef(0);
-  
-  useEffect(() => {
-    if (history.length > lastHistoryLengthRef.current) {
-      const lastMove = history[history.length - 1].san;
-      if (lastMove.includes('#')) {
-        playCheckmate();
-      } else if (lastMove.includes('x')) {
-        playCapture();
-      } else {
-        playMove();
-      }
-    }
-    lastHistoryLengthRef.current = history.length;
-  }, [history, playMove, playCapture, playCheckmate]);
 
   // Timers
   const [wTime, setWTime] = useState(600); // 10 mins
@@ -69,6 +54,7 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
   const cryptoManagerRef = useRef<CryptoManager>(new CryptoManager());
   const [isEncrypted, setIsEncrypted] = useState(false);
   const [resignedBy, setResignedBy] = useState<string | null>(null);
+  const [timeoutColor, setTimeoutColor] = useState<"w" | "b" | null>(null);
 
   // Initialize socket for online
   useEffect(() => {
@@ -142,7 +128,19 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
     socket.on("move", (moveData: { fen: string, move: any }) => {
       const newGame = new Chess(moveData.fen);
       setGame(newGame);
-      setHistory(prev => [...prev, typeof moveData.move === 'string' ? { san: moveData.move, grade: '' } : moveData.move]);
+      const moveObj = typeof moveData.move === 'string' ? { san: moveData.move, grade: '' } : moveData.move;
+      setHistory(prev => [...prev, moveObj]);
+
+      // Play move/capture/checkmate sound for the incoming online opponent move
+      if (moveObj.san) {
+        if (moveObj.san.includes('#')) {
+          playCheckmate();
+        } else if (moveObj.san.includes('x')) {
+          playCapture();
+        } else {
+          playMove();
+        }
+      }
     });
 
     socket.on("chat_message", async (msg: { sender: string; payload: any, id: string }) => {
@@ -194,22 +192,37 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
 
   // Timers
   useEffect(() => {
-    if (game.isGameOver() || (mode !== "ai" && !opponent)) return;
+    if (game.isGameOver() || (mode !== "ai" && !opponent) || timeoutColor) return;
 
     timerRef.current = setInterval(() => {
       if (game.turn() === "w") {
-        setWTime(t => Math.max(0, t - 1));
+        setWTime(t => {
+          if (t <= 1) {
+            setTimeoutColor("w");
+            if (timerRef.current) clearInterval(timerRef.current);
+            return 0;
+          }
+          return t - 1;
+        });
       } else {
-        setBTime(t => Math.max(0, t - 1));
+        setBTime(t => {
+          if (t <= 1) {
+            setTimeoutColor("b");
+            if (timerRef.current) clearInterval(timerRef.current);
+            return 0;
+          }
+          return t - 1;
+        });
       }
     }, 1000);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [game, opponent, mode]);
+  }, [game, opponent, mode, timeoutColor]);
 
   const makeMove = useCallback((move: { from: string; to: string; promotion?: string }) => {
+    if (game.isGameOver() || resignedBy || timeoutColor) return false;
     const possibleMoves = game.moves({ verbose: true });
     
     // check if move is valid
@@ -235,15 +248,45 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
         setGame(newGame);
         setHistory(prev => [...prev, { san: result.san, grade: "..." }]);
 
+        // Play move/capture/checkmate sound immediately when move is made
+        if (result.san.includes('#')) {
+          playCheckmate();
+        } else if (result.san.includes('x')) {
+          playCapture();
+        } else {
+          playMove();
+        }
+
         // Asynchronously evaluate the grade in parallel using the grading worker
         (async () => {
            // We calculate both the previous score and the current move score simultaneously on the dedicated grading worker so we don't block the AI worker
-           const [beforeInfo, afterInfo] = await Promise.all([
-             asyncGetBestMove(oldFen, 3, false), // Run on Grading worker
-             asyncGetBestMove(newGame.fen(), 2, false) // Run on Grading worker
+            const [beforeInfo, afterInfo] = await Promise.all([
+             asyncGetBestMove(oldFen, 4, false), // Run on Grading worker
+             asyncGetBestMove(newGame.fen(), 4, false) // Run on Grading worker
            ]);
            
-           const grade = getMoveGrade(beforeInfo.score, afterInfo.score, isWhiteTurn);
+           // Gather context for Chess.com move analysis
+           const prevGame = new Chess(oldFen);
+           const numLegalMoves = prevGame.moves().length;
+           const historyLength = history.length;
+           
+           const replyGame = new Chess(newGame.fen());
+           if (afterInfo.move) {
+             try {
+               replyGame.move(afterInfo.move);
+             } catch (e) {}
+           }
+
+           const context = {
+             numLegalMoves,
+             san: result.san,
+             allEvaluations: beforeInfo.allEvaluations,
+             historyLength,
+             boardBeforeFen: oldFen,
+             boardAfterReplyFen: replyGame.fen()
+           };
+
+           const grade = getMoveGrade(beforeInfo.score, afterInfo.score, isWhiteTurn, context);
            
            setHistory(prev => {
               const next = [...prev];
@@ -284,24 +327,56 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
                 const aiMoveInfo = await asyncGetBestMove(aiFen, aiLevel, true);
                 
                 const aiGame = new Chess(aiFen);
-                aiGame.move(aiMoveInfo.move);
+                const aiMoveResult = aiGame.move(aiMoveInfo.move);
                 
                 // 2. Play the move on the board instantly
                 setGame(aiGame);
                 setHistory(prev => [...prev, { san: aiMoveInfo.move, grade: "..." }]);
 
+                // Play move/capture/checkmate sound immediately when AI moves
+                if (aiMoveResult) {
+                  if (aiMoveResult.san.includes('#')) {
+                    playCheckmate();
+                  } else if (aiMoveResult.san.includes('x')) {
+                    playCapture();
+                  } else {
+                    playMove();
+                  }
+                }
+
                 // 3. Evaluate the move's grade in the background in parallel on the grading worker!
                 let beforePromise;
-                if (aiLevel === 3) {
-                    beforePromise = Promise.resolve({ score: aiMoveInfo.score });
+                if (aiLevel >= 4) {
+                    beforePromise = Promise.resolve({ score: aiMoveInfo.score, allEvaluations: aiMoveInfo.allEvaluations });
                 } else {
-                    beforePromise = asyncGetBestMove(aiFen, 3, false); // Grading worker
+                    beforePromise = asyncGetBestMove(aiFen, 4, false); // Grading worker
                 }
                 
-                const afterPromise = asyncGetBestMove(aiGame.fen(), 2, false); // Grading worker
+                const afterPromise = asyncGetBestMove(aiGame.fen(), 4, false); // Grading worker
                 
                 const [beforeInfo, afterInfo] = await Promise.all([beforePromise, afterPromise]);
-                const aiGrade = getMoveGrade(beforeInfo.score, afterInfo.score, false);
+
+                const prevGame = new Chess(aiFen);
+                const numLegalMoves = prevGame.moves().length;
+                const historyLength = history.length;
+
+                const replyGame = new Chess(aiGame.fen());
+                if (afterInfo.move) {
+                  try {
+                    replyGame.move(afterInfo.move);
+                  } catch (e) {}
+                }
+
+                const context = {
+                  numLegalMoves,
+                  san: aiMoveInfo.move,
+                  allEvaluations: beforeInfo.allEvaluations,
+                  historyLength: historyLength,
+                  boardBeforeFen: aiFen,
+                  boardAfterReplyFen: replyGame.fen()
+                };
+
+                const aiGrade = getMoveGrade(beforeInfo.score, afterInfo.score, false, context);
                 
                 setHistory(prev => {
                   const next = [...prev];
@@ -384,6 +459,7 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
     history,
     isEncrypted,
     resignedBy,
+    timeoutColor,
     undoRequest,
     handleUndoResponse,
     makeMove,
