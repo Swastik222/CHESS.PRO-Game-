@@ -309,7 +309,7 @@ export default function App() {
           socket={globalSocket}
           onClose={() => setShowOnlinePlayers(false)}
           onChallenge={(targetUsername) => {
-             const newRoomId = Math.random().toString(36).substring(2, 9);
+             const newRoomId = Math.random().toString(36).substring(2, 9).toUpperCase();
              globalSocket?.emit("challenge_user", { targetUsername, fromUsername: user.username, roomId: newRoomId });
              setWaitingChallenge(targetUsername);
           }}

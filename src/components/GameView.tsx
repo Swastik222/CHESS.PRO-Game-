@@ -242,23 +242,17 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
                 <input 
                   type="text" 
                   readOnly 
-                  value={(() => {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('room', roomId || '');
-                    return url.toString();
-                  })()}
-                  className="flex-1 bg-white dark:bg-[#0a0a0b] border border-gray-200 dark:border-[#2a2a2c] rounded px-2 py-1.5 text-xs text-gray-900 dark:text-white font-mono truncate outline-none transition-colors"
+                  value={roomId?.toUpperCase() || ''}
+                  className="flex-1 bg-white dark:bg-[#0a0a0b] border border-gray-200 dark:border-[#2a2a2c] rounded px-2 py-1.5 text-xs text-gray-900 dark:text-white font-mono truncate outline-none transition-colors text-center"
                   onClick={(e) => (e.target as HTMLInputElement).select()}
                 />
                 <button 
                   onClick={() => {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('room', roomId || '');
-                    navigator.clipboard.writeText(url.toString());
-                    alert("Room link copied! Share this with your opponent.");
+                    navigator.clipboard.writeText(roomId?.toUpperCase() || '');
+                    alert("Room code copied! Share this with your opponent.");
                   }}
                   className="p-1.5 shrink-0 bg-gray-100 dark:bg-[#1d1d20] hover:bg-gray-200 dark:hover:bg-[#2a2a2c] border border-gray-300 dark:border-[#3a3a3d] rounded text-gray-900 dark:text-white transition-colors"
-                  title="Copy Room Link"
+                  title="Copy Room Code"
                 >
                   <Copy className="w-3.5 h-3.5" />
                 </button>
