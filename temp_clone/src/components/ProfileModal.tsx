@@ -20,7 +20,7 @@ export function ProfileModal({ user, onClose }: { user: PlayerInfo; onClose: () 
 
   useEffect(() => {
     async function fetchMatches() {
-      if (!user.uid || user.uid.startsWith("local_")) {
+      if (!user.uid) {
         setLoading(false);
         return;
       }
@@ -225,7 +225,7 @@ function ReviewBoard({ fen }: { fen: string }) {
   
   if (!Chessboard) return <div className="aspect-square bg-gray-100 dark:bg-[#1a1a1c] animate-pulse rounded-lg" />;
   
-  return <Chessboard options={{ position: fen, allowDragging: false, darkSquareStyle: { backgroundColor: "#779556" }, lightSquareStyle: { backgroundColor: "#ebecd0" } }} />;
+  return <Chessboard position={fen} arePiecesDraggable={false} customDarkSquareStyle={{ backgroundColor: "#779556" }} customLightSquareStyle={{ backgroundColor: "#ebecd0" }} />;
 }
 
 function StatCard({ icon, label, value }: { icon: React.ReactNode, label: string, value: string | number }) {

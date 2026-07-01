@@ -1,5 +1,5 @@
 import React from "react";
-import { X, LogOut } from "lucide-react";
+import { X } from "lucide-react";
 import { cn } from "../lib/utils";
 import { BoardTheme, PieceStyle } from "../types";
 
@@ -9,11 +9,9 @@ interface SettingsModalProps {
   setBoardTheme: (theme: BoardTheme) => void;
   pieceStyle: PieceStyle;
   setPieceStyle: (style: PieceStyle) => void;
-  user?: any;
-  onLogout?: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, boardTheme, setBoardTheme, pieceStyle, setPieceStyle, user, onLogout }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, boardTheme, setBoardTheme, pieceStyle, setPieceStyle }) => {
   const themes: { id: BoardTheme; name: string; colors: string[] }[] = [
     { id: "classic", name: "Classic", colors: ["#f0d9b5", "#b58863"] },
     { id: "green", name: "Green", colors: ["#ffffdd", "#86a666"] },
@@ -83,21 +81,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, boardThem
               ))}
             </div>
           </section>
-
-          {user && onLogout && (
-            <section className="pt-4 border-t border-gray-200 dark:border-[#2a2a2c]">
-              <button
-                onClick={() => {
-                  onLogout();
-                  onClose();
-                }}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-red-100 hover:bg-red-200 text-red-600 dark:bg-red-500/10 dark:hover:bg-red-500/20 dark:text-red-400 font-bold rounded-xl transition-colors"
-              >
-                <LogOut className="w-5 h-5" />
-                Logout
-              </button>
-            </section>
-          )}
         </div>
       </div>
     </div>

@@ -4,22 +4,9 @@ import { auth, db } from "../lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { X, LogIn, UserCircle } from "lucide-react";
 
-export function LoginModal({ onClose, onGuestFallback }: { onClose: () => void, onGuestFallback?: (user: any) => void }) {
+export function LoginModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const createLocalGuest = () => {
-    const mockUid = "local_" + Math.random().toString(36).substring(2, 9);
-    const mockUser = {
-      uid: mockUid,
-      username: `Guest_${mockUid.substring(6)}`,
-      rating: 1000,
-      isGuest: true,
-    };
-    if (onGuestFallback) {
-      onGuestFallback(mockUser);
-    }
-  };
 
   const handleGoogleLogin = async () => {
     try {
@@ -32,26 +19,22 @@ export function LoginModal({ onClose, onGuestFallback }: { onClose: () => void, 
       const docSnap = await getDoc(userRef);
 
       if (!docSnap.exists()) {
-        try {
-          await setDoc(userRef, {
-            uid: user.uid,
-            displayName: user.displayName || "Player",
-            isGuest: false,
-            rating: 1200,
-            gamesPlayed: 0,
-            gamesWon: 0,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        } catch (dbErr) {
-           console.warn("Failed to create user doc, might be permission issue.", dbErr);
-        }
+        await setDoc(userRef, {
+          uid: user.uid,
+          displayName: user.displayName || "Player",
+          isGuest: false,
+          rating: 1200,
+          gamesPlayed: 0,
+          gamesWon: 0,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
       }
       onClose();
     } catch (err: any) {
       console.error(err);
-      if (err.code === 'auth/network-request-failed' || err.code === 'auth/popup-blocked') {
-        setError("Google Sign-In popup blocked by browser. Please allow popups or open the app in a new tab.");
+      if (err.code === 'auth/network-request-failed') {
+        setError("Google Sign-In blocked by browser. Please open the app in a new tab.");
       } else {
         setError(err.message);
       }
@@ -70,31 +53,24 @@ export function LoginModal({ onClose, onGuestFallback }: { onClose: () => void, 
       const docSnap = await getDoc(userRef);
 
       if (!docSnap.exists()) {
-        try {
-          await setDoc(userRef, {
-            uid: user.uid,
-            displayName: `Guest_${user.uid.substring(0, 5)}`,
-            isGuest: true,
-            rating: 1000,
-            gamesPlayed: 0,
-            gamesWon: 0,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        } catch (dbErr) {
-          console.warn("Failed to create guest user doc, might be permission issue.", dbErr);
-        }
+        await setDoc(userRef, {
+          uid: user.uid,
+          displayName: `Guest_${user.uid.substring(0, 5)}`,
+          isGuest: true,
+          rating: 1000,
+          gamesPlayed: 0,
+          gamesWon: 0,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
       }
       onClose();
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/admin-restricted-operation') {
-        // Fallback to local guest if anonymous login is disabled
-        console.warn("Anonymous login disabled in Firebase, falling back to local guest.");
-        createLocalGuest();
+        setError("Anonymous Sign-In is disabled. Please enable it in Firebase Console.");
       } else {
-        console.error(err.message + " - Falling back to local guest...");
-        createLocalGuest();
+        setError(err.message);
       }
     } finally {
       setLoading(false);

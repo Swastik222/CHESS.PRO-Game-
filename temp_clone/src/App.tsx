@@ -2,15 +2,14 @@ import { useState, useEffect } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./lib/firebase";
-import { io } from "socket.io-client";
 import { GameView } from "./components/GameView";
-import { HomeLobby } from "./components/HomeLobby";
+import { Home } from "./components/Home";
 import { Leaderboard } from "./components/Leaderboard";
 import { PuzzleView } from "./components/PuzzleView";
 import { SettingsModal } from "./components/SettingsModal";
 import { LoginModal } from "./components/LoginModal";
 import { ProfileModal } from "./components/ProfileModal";
-import { Moon, Sun, User, Share2, Settings, Sparkles, Users, Trophy } from "lucide-react";
+import { Moon, Sun, User, Share2, Settings, LogOut } from "lucide-react";
 import { cn } from "./lib/utils";
 import { BoardTheme, PieceStyle } from "./types";
 
@@ -36,7 +35,6 @@ export default function App() {
   const [aiLevel, setAiLevel] = useState<number>(2);
   const [boardTheme, setBoardTheme] = useState<BoardTheme>("green");
   const [pieceStyle, setPieceStyle] = useState<PieceStyle>("classic");
-  const [onlineUsersCount, setOnlineUsersCount] = useState<number>(0);
 
   useEffect(() => {
     let unsubscribeSnapshot: (() => void) | undefined;
@@ -100,21 +98,6 @@ export default function App() {
   }, [darkMode]);
 
   useEffect(() => {
-    const newSocket = io(window.location.origin);
-    if (user && user.username) {
-      newSocket.on("connect", () => {
-        newSocket.emit("register_user", user.username);
-      });
-    }
-    newSocket.on("online_users", (users: string[]) => {
-      setOnlineUsersCount(users.length);
-    });
-    return () => {
-      newSocket.disconnect();
-    };
-  }, [user]);
-
-  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const room = params.get("room");
     if (room && user && !mode) {
@@ -135,12 +118,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (e) {
-      console.warn("Firebase sign out failed", e);
-    }
-    setUser(null);
+    await signOut(auth);
     setMode(null);
   };
 
@@ -163,57 +141,78 @@ export default function App() {
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-pink-400/20 dark:bg-pink-600/20 blur-[120px] pointer-events-none" />
       
       {(!mode || showLeaderboard) && (
-        <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-white/20 dark:border-white/10 bg-white/40 dark:bg-[#0a0a0c]/80 backdrop-blur-md transition-colors">
+        <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/40 backdrop-blur-md transition-colors">
           <div className="flex items-center gap-4 cursor-pointer" onClick={() => { setMode(null); setShowLeaderboard(false); }}>
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg text-white">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black tracking-tight text-gray-900 dark:text-white uppercase">
-                  Chess Masters
-                </h1>
-                <span className="px-2 py-0.5 bg-blue-500/20 text-blue-500 rounded text-[10px] font-bold uppercase hidden sm:inline-block">PRO</span>
-              </div>
-              <span className="text-xs text-gray-500 dark:text-gray-400">Outplay the engine or connect online</span>
-            </div>
+            <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2">
+              <span className="text-2xl pb-1">♞</span> CHESS.<span className="text-gray-500 dark:text-[#7e7e81]">PRO</span>
+            </h1>
+            <span className="px-2 py-0.5 bg-gray-100 dark:bg-[#1d1d20] border border-gray-200 dark:border-[#3a3a3d] rounded text-[10px] text-gray-500 dark:text-[#a1a1a5] font-mono hidden sm:inline-block">v2.4.0 ENCRYPTED</span>
           </div>
           
-          <div className="flex items-center gap-4 md:gap-6">
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/20 dark:bg-[#1a1a1d] rounded-full border border-white/20 dark:border-white/5 shadow-sm">
-              <Users className="w-4 h-4 text-blue-500" />
-              <span className="text-xs text-gray-700 dark:text-gray-300 font-bold">{Math.max(1, onlineUsersCount)} Online</span>
+          <div className="flex items-center gap-6">
+            <div className="hidden md:flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]"></div>
+              <span className="text-xs text-gray-500 dark:text-[#a1a1a5] font-medium">OFFLINE MODE READY</span>
             </div>
             
+            <div className="hidden sm:flex bg-white/20 dark:bg-black/20 rounded-lg p-1 border border-white/20 dark:border-white/10 backdrop-blur-sm">
+              <button 
+                onClick={() => { setMode(null); setShowLeaderboard(false); }}
+                className={cn("px-3 py-1 text-xs font-semibold rounded-md transition-colors", !showLeaderboard && !mode ? "bg-white/60 dark:bg-white/10 text-gray-900 dark:text-white shadow-sm" : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white")}
+              >
+                PLAY
+              </button>
+              <button 
+                onClick={() => setShowLeaderboard(true)}
+                className={cn("px-3 py-1 text-xs font-semibold rounded-md transition-colors", showLeaderboard ? "bg-white/60 dark:bg-white/10 text-gray-900 dark:text-white shadow-sm" : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white")}
+              >
+                LEADERBOARD
+              </button>
+              <button 
+                onClick={handleShare}
+                className="px-3 py-1 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+              >
+                SHARE
+              </button>
+              <button 
+                onClick={() => setShowSettings(true)}
+                className="px-3 py-1 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors flex items-center gap-1"
+              >
+                <Settings className="w-3.5 h-3.5" /> SETTINGS
+              </button>
+            </div>
+
             <div className="flex items-center gap-3">
+              {user ? (
+                <>
+                  <div 
+                    className="flex items-center gap-2 cursor-pointer hover:bg-white/30 dark:hover:bg-white/10 p-1.5 rounded-lg transition-colors"
+                    onClick={() => setShowProfile(true)}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3b82f6] to-[#8b5cf6] flex items-center justify-center text-[10px] font-bold text-white shadow-sm">
+                      {user.username.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold leading-none text-gray-900 dark:text-white">{user.username}</span>
+                      <span className="text-[10px] text-gray-600 dark:text-gray-300">{user.rating ? `${user.rating} ELO` : 'UNRANKED'}</span>
+                    </div>
+                  </div>
+                  <button onClick={handleLogout} className="p-1 rounded hover:bg-white/30 dark:hover:bg-white/10 transition-colors text-gray-600 dark:text-gray-300 ml-1" title="Log Out">
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setShowLogin(true)} className="px-4 py-1.5 bg-blue-600/90 backdrop-blur hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors shadow-sm">
+                  LOGIN
+                </button>
+              )}
               <button 
                 onClick={() => setDarkMode(!darkMode)}
-                className="p-2 rounded-full bg-white/20 dark:bg-[#1a1a1d] border border-white/20 dark:border-white/5 hover:bg-white/30 dark:hover:bg-white/10 transition-colors text-gray-600 dark:text-gray-300 shadow-sm"
+                className="p-1 rounded hover:bg-white/30 dark:hover:bg-white/10 transition-colors text-gray-600 dark:text-gray-300 ml-2"
                 title="Toggle Dark Mode"
               >
                 {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </button>
-
-              {user ? (
-                <button 
-                  className="flex items-center gap-3 hover:bg-white/30 dark:hover:bg-white/10 p-1.5 pr-3 rounded-full border border-white/20 dark:border-white/5 transition-colors bg-white/20 dark:bg-[#1a1a1d] shadow-sm"
-                  onClick={() => setShowProfile(true)}
-                >
-                  <div className="flex flex-col text-right hidden sm:flex">
-                    <span className="text-xs font-bold leading-none text-gray-900 dark:text-white mb-0.5">{user.username}</span>
-                    <span className="text-[10px] font-bold text-yellow-600 dark:text-yellow-500 flex items-center justify-end gap-1">
-                      <Trophy className="w-3 h-3" /> ELO {user.rating || 1200}
-                    </span>
-                  </div>
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3a3a3c] to-[#1e1e1f] border border-white/10 flex items-center justify-center text-gray-300">
-                    <User className="w-4 h-4" />
-                  </div>
-                </button>
-              ) : (
-                <button onClick={() => setShowLogin(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full text-xs font-bold transition-colors shadow-sm">
-                  LOGIN
-                </button>
-              )}
             </div>
           </div>
         </header>
@@ -228,18 +227,7 @@ export default function App() {
           ) : mode ? (
             <GameView mode={mode as any} user={user} roomId={roomId} aiLevel={aiLevel} onExit={() => setMode(null)} darkMode={darkMode} boardTheme={boardTheme} pieceStyle={pieceStyle} />
           ) : (
-            <HomeLobby 
-              user={user} 
-              onSelectMode={(m, room, level) => {
-                if (level) setAiLevel(level);
-                handleStartGame(m, room || undefined);
-              }}
-              onOpenLeaderboard={() => setShowLeaderboard(true)}
-              onOpenPuzzles={() => handleStartGame("puzzle")}
-              onOpenSettings={() => setShowSettings(true)}
-              onOpenProfile={() => setShowProfile(true)}
-              onOpenLogin={() => setShowLogin(true)}
-            />
+            <Home onStart={handleStartGame} user={user} onSetUser={setUser} />
           )}
         </div>
       </main>
@@ -251,19 +239,11 @@ export default function App() {
           setBoardTheme={setBoardTheme}
           pieceStyle={pieceStyle}
           setPieceStyle={setPieceStyle}
-          user={user}
-          onLogout={handleLogout}
         />
       )}
 
       {showLogin && (
-        <LoginModal 
-          onClose={() => setShowLogin(false)} 
-          onGuestFallback={(localUser) => {
-            setUser(localUser);
-            setShowLogin(false);
-          }}
-        />
+        <LoginModal onClose={() => setShowLogin(false)} />
       )}
 
       {showProfile && user && (
