@@ -120,7 +120,8 @@ export function getMoveGrade(scoreBefore: number, scoreAfter: number, isWhite: b
 }
 
 export function calculateAccuracy(grades: string[]): number {
-  if (grades.length === 0) return 100;
+  const validGrades = grades.filter(g => g !== "..." && g !== "");
+  if (validGrades.length === 0) return 100;
   
   const weights: Record<string, number> = {
     "Best": 100,
@@ -131,6 +132,6 @@ export function calculateAccuracy(grades: string[]): number {
     "Blunder": 0
   };
   
-  const total = grades.reduce((acc, g) => acc + (weights[g] || 0), 0);
-  return Math.round(total / grades.length);
+  const total = validGrades.reduce((acc, g) => acc + (weights[g] || 0), 0);
+  return Math.round(total / validGrades.length);
 }

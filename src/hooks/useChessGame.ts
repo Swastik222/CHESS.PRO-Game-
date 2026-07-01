@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Chess, Move } from "chess.js";
 import { io, Socket } from "socket.io-client";
 import { CryptoManager } from "../lib/crypto";
-import { getBestMove, getMoveGrade, calculateAccuracy, minimax } from "../lib/engine";
+import { asyncGetBestMove, asyncGetGrade } from "../lib/engineClient";
+import { calculateAccuracy } from "../lib/engine";
 import { useChessSounds } from "./useChessSounds";
 
 export type GameMode = "ai" | "local" | "online" | "puzzle";
@@ -222,22 +223,40 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
     }
 
     try {
-      let scoreBefore = getBestMove(game, 3).score;
+      const oldFen = game.fen();
+      const isWhiteTurn = game.turn() === 'w';
 
-      const newGame = new Chess(game.fen());
+      const newGame = new Chess(oldFen);
       const result = newGame.move(move);
       
       if (result) {
-        let grade = "";
-        const scoreAfter = getBestMove(newGame, 2).score;
-        grade = getMoveGrade(scoreBefore, scoreAfter, game.turn() === 'w');
-
         setGame(newGame);
-        setHistory(prev => [...prev, { san: result.san, grade }]);
+        setHistory(prev => [...prev, { san: result.san, grade: "..." }]);
+
+        // Asynchronously evaluate the grade
+        (async () => {
+           const beforeInfo = await asyncGetBestMove(oldFen, 3);
+           const grade = await asyncGetGrade(newGame.fen(), 2, beforeInfo.score, isWhiteTurn);
+           
+           setHistory(prev => {
+              const next = [...prev];
+              // Update the latest move's grade
+              for (let i = next.length - 1; i >= 0; i--) {
+                  if (next[i].san === result.san && next[i].grade === "...") {
+                      next[i] = { ...next[i], grade };
+                      break;
+                  }
+              }
+              return next;
+           });
+
+           if (socket && roomId) {
+             socket.emit("move", roomId, { fen: newGame.fen(), move: { san: result.san, grade } });
+           }
+        })();
 
         if (socket && roomId) {
-          socket.emit("move", roomId, { fen: newGame.fen(), move: { san: result.san, grade } });
-          
+          // Socket emit move handled after grade calculation
           if (newGame.isGameOver()) {
             let winner = null;
             if (newGame.isCheckmate()) {
@@ -251,21 +270,29 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
           }
         } else if (mode === "ai" && newGame.turn() === "b" && !newGame.isGameOver()) {
             // AI Move
-            setTimeout(() => {
-                const aiGame = new Chess(newGame.fen());
+            (async () => {
+                const aiFen = newGame.fen();
+                const aiScoreBeforeInfo = await asyncGetBestMove(aiFen, 3);
+                const aiMoveInfo = await asyncGetBestMove(aiFen, aiLevel);
                 
-                const aiScoreBefore = getBestMove(aiGame, 3).score;
-                
-                // Depth 3 for better AI, Depth 1 or 2 for easier
-                const aiMoveInfo = getBestMove(aiGame, aiLevel);
+                const aiGame = new Chess(aiFen);
                 aiGame.move(aiMoveInfo.move);
                 
-                const aiScoreAfter = getBestMove(aiGame, 2).score;
-                const aiGrade = getMoveGrade(aiScoreBefore, aiScoreAfter, false);
-                
                 setGame(aiGame);
-                setHistory(prev => [...prev, { san: aiMoveInfo.move, grade: aiGrade }]);
-            }, 500);
+                setHistory(prev => [...prev, { san: aiMoveInfo.move, grade: "..." }]);
+
+                const aiGrade = await asyncGetGrade(aiGame.fen(), 2, aiScoreBeforeInfo.score, false);
+                setHistory(prev => {
+                  const next = [...prev];
+                  for (let i = next.length - 1; i >= 0; i--) {
+                      if (next[i].san === aiMoveInfo.move && next[i].grade === "...") {
+                          next[i] = { ...next[i], grade: aiGrade };
+                          break;
+                      }
+                  }
+                  return next;
+                });
+            })();
         }
         return true;
       }
