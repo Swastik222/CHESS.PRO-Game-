@@ -3,7 +3,7 @@ import { Chess, Move } from "chess.js";
 import { io, Socket } from "socket.io-client";
 import { CryptoManager } from "../lib/crypto";
 import { asyncGetBestMove, asyncGetGrade } from "../lib/engineClient";
-import { calculateAccuracy } from "../lib/engine";
+import { calculateAccuracy, getMoveGrade } from "../lib/engine";
 import { useChessSounds } from "./useChessSounds";
 
 export type GameMode = "ai" | "local" | "online" | "puzzle";
@@ -45,9 +45,10 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
   }, [socket, roomId, history]);
   
   const { playMove, playCapture, playCheckmate } = useChessSounds(soundEnabled);
+  const lastHistoryLengthRef = useRef(0);
   
   useEffect(() => {
-    if (history.length > 0) {
+    if (history.length > lastHistoryLengthRef.current) {
       const lastMove = history[history.length - 1].san;
       if (lastMove.includes('#')) {
         playCheckmate();
@@ -57,6 +58,7 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
         playMove();
       }
     }
+    lastHistoryLengthRef.current = history.length;
   }, [history, playMove, playCapture, playCheckmate]);
 
   // Timers
@@ -233,10 +235,15 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
         setGame(newGame);
         setHistory(prev => [...prev, { san: result.san, grade: "..." }]);
 
-        // Asynchronously evaluate the grade
+        // Asynchronously evaluate the grade in parallel using the grading worker
         (async () => {
-           const beforeInfo = await asyncGetBestMove(oldFen, 3);
-           const grade = await asyncGetGrade(newGame.fen(), 2, beforeInfo.score, isWhiteTurn);
+           // We calculate both the previous score and the current move score simultaneously on the dedicated grading worker so we don't block the AI worker
+           const [beforeInfo, afterInfo] = await Promise.all([
+             asyncGetBestMove(oldFen, 3, false), // Run on Grading worker
+             asyncGetBestMove(newGame.fen(), 2, false) // Run on Grading worker
+           ]);
+           
+           const grade = getMoveGrade(beforeInfo.score, afterInfo.score, isWhiteTurn);
            
            setHistory(prev => {
               const next = [...prev];
@@ -269,19 +276,33 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
             });
           }
         } else if (mode === "ai" && newGame.turn() === "b" && !newGame.isGameOver()) {
-            // AI Move
+            // AI Move - Optimize to calculate move FIRST on dedicated AI worker and play it instantly
             (async () => {
                 const aiFen = newGame.fen();
-                const aiScoreBeforeInfo = await asyncGetBestMove(aiFen, 3);
-                const aiMoveInfo = await asyncGetBestMove(aiFen, aiLevel);
+                
+                // 1. Get the bot's move as fast as possible on the dedicated AI worker
+                const aiMoveInfo = await asyncGetBestMove(aiFen, aiLevel, true);
                 
                 const aiGame = new Chess(aiFen);
                 aiGame.move(aiMoveInfo.move);
                 
+                // 2. Play the move on the board instantly
                 setGame(aiGame);
                 setHistory(prev => [...prev, { san: aiMoveInfo.move, grade: "..." }]);
 
-                const aiGrade = await asyncGetGrade(aiGame.fen(), 2, aiScoreBeforeInfo.score, false);
+                // 3. Evaluate the move's grade in the background in parallel on the grading worker!
+                let beforePromise;
+                if (aiLevel === 3) {
+                    beforePromise = Promise.resolve({ score: aiMoveInfo.score });
+                } else {
+                    beforePromise = asyncGetBestMove(aiFen, 3, false); // Grading worker
+                }
+                
+                const afterPromise = asyncGetBestMove(aiGame.fen(), 2, false); // Grading worker
+                
+                const [beforeInfo, afterInfo] = await Promise.all([beforePromise, afterPromise]);
+                const aiGrade = getMoveGrade(beforeInfo.score, afterInfo.score, false);
+                
                 setHistory(prev => {
                   const next = [...prev];
                   for (let i = next.length - 1; i >= 0; i--) {

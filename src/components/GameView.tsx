@@ -4,7 +4,7 @@ import { GameMode, PlayerInfo } from "../App";
 import { useChessGame } from "../hooks/useChessGame";
 import { Copy, LogOut, Send, ShieldCheck, Clock, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Bot, Users, User } from "lucide-react";
 import { cn } from "../lib/utils";
-import { calculateAccuracy } from "../lib/engine";
+import { calculateAccuracy, getCalibratedAccuracies, getPerformanceRating } from "../lib/engine";
 import { Chess } from "chess.js";
 
 import { BoardTheme, PieceStyle } from "../types";
@@ -526,38 +526,113 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-[#0a0a0b] transition-colors">
-              <div className="grid grid-cols-2 gap-6 mb-8">
-                <div className="p-4 rounded-xl bg-white dark:bg-[#1d1d20] border border-gray-200 dark:border-[#2a2a2c] text-center shadow-sm dark:shadow-none transition-colors">
-                  <div className="text-[10px] font-bold text-gray-500 dark:text-[#7e7e81] uppercase tracking-widest mb-1">Your Accuracy</div>
-                  <div className="text-6xl font-bold text-green-600 dark:text-green-400">
-                    {(() => {
-                      const acc = calculateAccuracy(history.filter((_, i) => i % 2 === (playerColor === 'w' ? 0 : 1)).map(m => m.grade).filter(Boolean));
-                      return acc + "%";
-                    })()}
-                  </div>
-                  <div className="text-sm font-bold text-gray-500 dark:text-[#a1a1a5] mt-2">
-                    Est. Rating: {(() => {
-                      const acc = calculateAccuracy(history.filter((_, i) => i % 2 === (playerColor === 'w' ? 0 : 1)).map(m => m.grade).filter(Boolean));
-                      return Math.max(100, Math.round(acc * 35 - 500));
-                    })()}
-                  </div>
-                </div>
-                <div className="p-4 rounded-xl bg-white dark:bg-[#1d1d20] border border-gray-200 dark:border-[#2a2a2c] text-center shadow-sm dark:shadow-none transition-colors">
-                  <div className="text-[10px] font-bold text-gray-500 dark:text-[#7e7e81] uppercase tracking-widest mb-1">Opponent Accuracy</div>
-                  <div className="text-6xl font-bold text-red-600 dark:text-red-400">
-                    {(() => {
-                      const acc = calculateAccuracy(history.filter((_, i) => i % 2 === (playerColor === 'w' ? 1 : 0)).map(m => m.grade).filter(Boolean));
-                      return acc + "%";
-                    })()}
-                  </div>
-                  <div className="text-sm font-bold text-gray-500 dark:text-[#a1a1a5] mt-2">
-                    Est. Rating: {(() => {
-                      const acc = calculateAccuracy(history.filter((_, i) => i % 2 === (playerColor === 'w' ? 1 : 0)).map(m => m.grade).filter(Boolean));
-                      return Math.max(100, Math.round(acc * 35 - 500));
-                    })()}
-                  </div>
-                </div>
-              </div>
+              {(() => {
+                const matchResult: "win" | "loss" | "draw" = resignedBy 
+                  ? (resignedBy === playerColor ? "loss" : "win")
+                  : game.isCheckmate()
+                    ? (game.turn() === playerColor ? "loss" : "win")
+                    : "draw";
+
+                const botRating = aiLevel === 1 ? 800 : aiLevel === 2 ? 1200 : aiLevel === 3 ? 1600 : 2000;
+                const baseOpponentRating = mode === "ai" ? botRating : 1500;
+
+                const { playerAccuracy, opponentAccuracy } = getCalibratedAccuracies(
+                  history,
+                  playerColor,
+                  matchResult,
+                  mode,
+                  aiLevel
+                );
+
+                const playerRatingEst = getPerformanceRating(playerAccuracy, baseOpponentRating, matchResult);
+                const opponentRatingEst = getPerformanceRating(opponentAccuracy, playerRatingEst, matchResult === "win" ? "loss" : matchResult === "loss" ? "win" : "draw");
+
+                const isPlayerWhite = playerColor === 'w';
+                const pMoves = history.filter((_, i) => i % 2 === (isPlayerWhite ? 0 : 1));
+                const oMoves = history.filter((_, i) => i % 2 === (isPlayerWhite ? 1 : 0));
+                
+                const pValid = pMoves.filter(m => m.grade && m.grade !== "..." && m.grade !== "").length;
+                const oValid = oMoves.filter(m => m.grade && m.grade !== "..." && m.grade !== "").length;
+                
+                const pBestExcellent = pMoves.filter(m => m.grade === "Best" || m.grade === "Excellent").length;
+                const oBestExcellent = oMoves.filter(m => m.grade === "Best" || m.grade === "Excellent").length;
+                
+                const playerMatchRate = pValid > 0 ? Math.round((pBestExcellent / pValid) * 100) : 0;
+                const opponentMatchRate = oValid > 0 ? Math.round((oBestExcellent / oValid) * 100) : 0;
+
+                const getGradeCount = (isPlayer: boolean, grade: string) => {
+                  const targetColorIdx = isPlayer ? (isPlayerWhite ? 0 : 1) : (isPlayerWhite ? 1 : 0);
+                  const playerGrades = history.filter((_, i) => i % 2 === targetColorIdx).map(m => m.grade);
+                  return playerGrades.filter(g => g === grade).length;
+                };
+
+                return (
+                  <>
+                    <div className="grid grid-cols-2 gap-6 mb-8">
+                      <div className="p-4 rounded-xl bg-white dark:bg-[#1d1d20] border border-gray-200 dark:border-[#2a2a2c] text-center shadow-sm dark:shadow-none transition-colors">
+                        <div className="text-[10px] font-bold text-gray-500 dark:text-[#7e7e81] uppercase tracking-widest mb-1">Your Accuracy</div>
+                        <div className="text-6xl font-bold text-green-600 dark:text-green-400">
+                          {playerAccuracy}%
+                        </div>
+                        <div className="text-sm font-bold text-gray-500 dark:text-[#a1a1a5] mt-2">
+                          Performance Rating: <span className="text-blue-500 dark:text-blue-400">{playerRatingEst}</span>
+                        </div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-white dark:bg-[#1d1d20] border border-gray-200 dark:border-[#2a2a2c] text-center shadow-sm dark:shadow-none transition-colors">
+                        <div className="text-[10px] font-bold text-gray-500 dark:text-[#7e7e81] uppercase tracking-widest mb-1">Opponent Accuracy</div>
+                        <div className="text-6xl font-bold text-red-600 dark:text-red-400">
+                          {opponentAccuracy}%
+                        </div>
+                        <div className="text-sm font-bold text-gray-500 dark:text-[#a1a1a5] mt-2">
+                          Performance Rating: <span className="text-blue-500 dark:text-blue-400">{opponentRatingEst}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Detailed Prediction Move Breakdown */}
+                    <div className="p-5 rounded-xl bg-white dark:bg-[#1d1d20] border border-gray-200 dark:border-[#2a2a2c] mb-8 transition-colors shadow-sm dark:shadow-none">
+                      <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-blue-500" />
+                        PREDICTION & ACCURACY BREAKDOWN
+                      </h3>
+                      
+                      <div className="grid grid-cols-3 text-center border-b border-gray-200 dark:border-[#2a2a2c] pb-2 mb-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                        <div>YOU</div>
+                        <div>MOVE QUALITY</div>
+                        <div>OPPONENT</div>
+                      </div>
+
+                      {[
+                        { name: "Excellent", desc: "Very high quality", countKey: "Excellent", color: "text-green-600 dark:text-green-400 font-bold" },
+                        { name: "Best", desc: "Top choice / Engine prediction", countKey: "Best", color: "text-green-500 dark:text-green-300 font-semibold" },
+                        { name: "Good", desc: "Solid developing move", countKey: "Good", color: "text-blue-500 dark:text-blue-400" },
+                        { name: "Inaccuracy", desc: "Slightly suboptimal", countKey: "Inaccuracy", color: "text-yellow-600 dark:text-yellow-400" },
+                        { name: "Mistake", desc: "Gives up some advantage", countKey: "Mistake", color: "text-orange-500 dark:text-orange-400" },
+                        { name: "Blunder", desc: "Critical error / Material loss", countKey: "Blunder", color: "text-red-500 dark:text-red-400 font-bold" }
+                      ].map((row) => {
+                        const pCount = getGradeCount(true, row.countKey);
+                        const oCount = getGradeCount(false, row.countKey);
+                        return (
+                          <div key={row.name} className="grid grid-cols-3 items-center text-center py-2 border-b border-gray-100 dark:border-[#202023] last:border-b-0 text-sm font-medium transition-colors">
+                            <div className="font-mono text-gray-900 dark:text-white bg-gray-50 dark:bg-black/20 py-1 rounded w-16 mx-auto">{pCount}</div>
+                            <div>
+                              <div className={cn("text-xs font-bold", row.color)}>{row.name}</div>
+                              <div className="text-[9px] text-gray-500 dark:text-[#7e7e81] font-normal leading-tight hidden sm:block">{row.desc}</div>
+                            </div>
+                            <div className="font-mono text-gray-900 dark:text-white bg-gray-50 dark:bg-black/20 py-1 rounded w-16 mx-auto">{oCount}</div>
+                          </div>
+                        );
+                      })}
+
+                      <div className="grid grid-cols-3 items-center text-center mt-6 pt-4 border-t border-gray-200 dark:border-[#2a2a2c] text-xs font-bold text-gray-500 uppercase tracking-widest">
+                        <div className="text-lg font-bold text-green-600 dark:text-green-400">{playerMatchRate}%</div>
+                        <div className="text-gray-900 dark:text-white leading-tight">ENGINE PREDICTION MATCH</div>
+                        <div className="text-lg font-bold text-red-600 dark:text-red-400">{opponentMatchRate}%</div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
               <div className="mb-4">
                 <h3 className="text-[10px] font-bold text-gray-500 dark:text-[#7e7e81] uppercase tracking-widest mb-3">Full Match History</h3>
