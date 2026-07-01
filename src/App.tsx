@@ -184,9 +184,9 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen w-full flex flex-col bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 dark:from-indigo-950 dark:via-purple-900 dark:to-slate-900 text-gray-900 dark:text-[#e1e1e3] font-sans overflow-hidden transition-colors relative">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-400/20 dark:bg-blue-600/20 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-pink-400/20 dark:bg-pink-600/20 blur-[120px] pointer-events-none" />
+    <div className="h-screen w-full flex flex-col bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 dark:bg-none dark:bg-[#0a0a0c] text-gray-900 dark:text-[#e1e1e3] font-sans overflow-hidden transition-colors relative">
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-400/20 dark:opacity-0 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-pink-400/20 dark:opacity-0 blur-[120px] pointer-events-none" />
       
       {(!mode || showLeaderboard) && (
         <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-white/20 dark:border-white/10 bg-white/40 dark:bg-[#0a0a0c]/80 backdrop-blur-md transition-colors">
