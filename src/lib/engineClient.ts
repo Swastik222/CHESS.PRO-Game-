@@ -5,11 +5,10 @@ class WorkerPool {
   private workers: { worker: Worker; busy: boolean }[] = [];
   private queue: { task: any; resolve: (val: any) => void }[] = [];
   private messageId = 0;
-  private callbacks = new Map<number, (data: any) => void>();
   private poolSize: number;
 
-  constructor() {
-    this.poolSize = Math.max(4, typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 4);
+  constructor(size?: number) {
+    this.poolSize = size || Math.max(2, typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 4);
   }
 
   private init() {
@@ -18,19 +17,27 @@ class WorkerPool {
       const worker = new EngineWorker();
       worker.onmessage = (e) => {
         const { id, result } = e.data;
-        if (this.callbacks.has(id)) {
-          this.callbacks.get(id)!(result);
-          this.callbacks.delete(id);
-        }
-        
-        const workerEntry = this.workers.find(w => w.worker === worker);
-        if (workerEntry) {
-          workerEntry.busy = false;
-        }
-        this.processQueue();
+        // Find the resolve callback from the task queue that was matched to this id
+        // Wait, we need a callbacks map
+        this.processMessage(id, result, worker);
       };
       this.workers.push({ worker, busy: false });
     }
+  }
+
+  private callbacks = new Map<number, (data: any) => void>();
+
+  private processMessage(id: number, result: any, worker: Worker) {
+    if (this.callbacks.has(id)) {
+      this.callbacks.get(id)!(result);
+      this.callbacks.delete(id);
+    }
+    
+    const workerEntry = this.workers.find(w => w.worker === worker);
+    if (workerEntry) {
+      workerEntry.busy = false;
+    }
+    this.processQueue();
   }
 
   public runTask(type: string, data: any): Promise<any> {
@@ -54,87 +61,23 @@ class WorkerPool {
   }
 }
 
-const pool = new WorkerPool();
+// Separate pools for AI Bot and Background Grading to avoid blocking each other
+const aiPool = new WorkerPool(2); 
+const gradingPool = new WorkerPool(Math.max(2, (typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 4) - 2));
 
 export function asyncGetBestMove(fen: string, depth: number, useAIWorker: boolean = false): Promise<{ move: string; score: number; allEvaluations?: { move: string; score: number }[] }> {
-  const game = new Chess(fen);
-  const moves = game.moves({ verbose: true });
+  const pool = useAIWorker ? aiPool : gradingPool;
   
-  if (moves.length === 0) {
-    return Promise.resolve({ move: "", score: 0 });
-  }
-
-  // If depth is extremely low or only 1 move is available, sequential search on a single worker is faster than parallel overhead
-  if (depth <= 1 || moves.length === 1) {
-    return pool.runTask('getBestMove', { fen, depth }).then((res) => ({
-      move: res.move,
-      score: res.score,
-      allEvaluations: res.allEvaluations
-    }));
-  }
-
-  // Sort moves like in getBestMove for better parallel performance
-  moves.sort((a, b) => {
-    let scoreA = a.captured ? 10 : 0;
-    let scoreB = b.captured ? 10 : 0;
-    if (a.promotion) scoreA += 5;
-    if (b.promotion) scoreB += 5;
-    return scoreB - scoreA;
-  });
-
-  const rootIsWhite = game.turn() === 'w';
-
-  // Run searches for each move's child position in parallel!
-  const promises = moves.map(async (move) => {
-    const childGame = new Chess(fen);
-    childGame.move(move.san);
-    const isMaximizing = childGame.turn() === 'w';
-    
-    // Evaluate the child position at depth - 1
-    const score = await pool.runTask('evaluatePosition', {
-      fen: childGame.fen(),
-      depth: depth - 1,
-      alpha: -Infinity,
-      beta: Infinity,
-      isMaximizingPlayer: isMaximizing
-    });
-    
-    return { move: move.san, score };
-  });
-
-  return Promise.all(promises).then((results) => {
-    let bestScore = rootIsWhite ? -Infinity : Infinity;
-    let bestMoves: string[] = [];
-
-    for (const res of results) {
-      if (rootIsWhite) {
-        if (res.score > bestScore) {
-          bestScore = res.score;
-          bestMoves = [res.move];
-        } else if (res.score === bestScore) {
-          bestMoves.push(res.move);
-        }
-      } else {
-        if (res.score < bestScore) {
-          bestScore = res.score;
-          bestMoves = [res.move];
-        } else if (res.score === bestScore) {
-          bestMoves.push(res.move);
-        }
-      }
-    }
-
-    const bestMove = bestMoves[Math.floor(Math.random() * bestMoves.length)] || moves[0].san;
-
-    return {
-      move: bestMove,
-      score: bestScore,
-      allEvaluations: results
-    };
-  });
+  // Directly run standard getBestMove which utilizes proper alpha-beta pruning
+  // This is much faster than parallelizing without root alpha-beta sharing
+  return pool.runTask('getBestMove', { fen, depth }).then((res) => ({
+    move: res.move,
+    score: res.score,
+    allEvaluations: res.allEvaluations
+  }));
 }
 
 // Keep signature for compatibility
 export function asyncGetGrade(fen: string, depth: number, scoreBefore: number, isWhite: boolean): Promise<string> {
-  return pool.runTask('getGrade', { fen, depth, scoreBefore, isWhite });
+  return gradingPool.runTask('getGrade', { fen, depth, scoreBefore, isWhite });
 }

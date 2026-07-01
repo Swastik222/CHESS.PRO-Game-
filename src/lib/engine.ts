@@ -82,70 +82,76 @@ const kingEndgamePST = [
   [-50,-30,-30,-30,-30,-30,-30,-50]
 ];
 
-function isEndgame(game: Chess): boolean {
+export function evaluateBoard(game: Chess): number {
+  let score = 0;
+  const fen = game.fen();
+  const boardPart = fen.split(' ')[0];
+  
+  let r = 0;
+  let c = 0;
   let whitePiecesMaterial = 0;
   let blackPiecesMaterial = 0;
   let hasWhiteQueen = false;
   let hasBlackQueen = false;
+  let whiteKingPos: {r: number, c: number} | null = null;
+  let blackKingPos: {r: number, c: number} | null = null;
   
-  const board = game.board();
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const piece = board[r][c];
-      if (piece) {
-        if (piece.type === 'q') {
-          if (piece.color === 'w') hasWhiteQueen = true;
-          else hasBlackQueen = true;
-        } else if (piece.type !== 'k') {
-          const val = pieceValues[piece.type];
-          if (piece.color === 'w') whitePiecesMaterial += val;
-          else blackPiecesMaterial += val;
-        }
+  for (let i = 0; i < boardPart.length; i++) {
+    const char = boardPart[i];
+    if (char === '/') {
+      r++;
+      c = 0;
+    } else if (char >= '1' && char <= '8') {
+      c += parseInt(char, 10);
+    } else {
+      const isWhite = char >= 'A' && char <= 'Z';
+      const type = char.toLowerCase();
+      const pieceVal = pieceValues[type];
+      
+      if (type === 'q') {
+        if (isWhite) hasWhiteQueen = true;
+        else hasBlackQueen = true;
+      } else if (type !== 'k') {
+        if (isWhite) whitePiecesMaterial += pieceVal;
+        else blackPiecesMaterial += pieceVal;
       }
+      
+      const pr = isWhite ? r : 7 - r;
+      const pc = c;
+      let psqtBonus = 0;
+      
+      if (type === 'p') psqtBonus = pawnPST[pr][pc];
+      else if (type === 'n') psqtBonus = knightPST[pr][pc];
+      else if (type === 'b') psqtBonus = bishopPST[pr][pc];
+      else if (type === 'r') psqtBonus = rookPST[pr][pc];
+      else if (type === 'q') psqtBonus = queenPST[pr][pc];
+      else if (type === 'k') {
+        psqtBonus = kingPST[pr][pc];
+        if (isWhite) whiteKingPos = {r: pr, c: pc};
+        else blackKingPos = {r: pr, c: pc};
+      }
+      
+      const total = pieceVal + psqtBonus;
+      score += isWhite ? total : -total;
+      
+      c++;
     }
   }
   
-  if (!hasWhiteQueen && !hasBlackQueen) return true;
-  if (hasWhiteQueen && whitePiecesMaterial <= 1300 && !hasBlackQueen) return true;
-  if (hasBlackQueen && blackPiecesMaterial <= 1300 && !hasWhiteQueen) return true;
-  if (hasWhiteQueen && hasBlackQueen && whitePiecesMaterial <= 900 && blackPiecesMaterial <= 900) return true;
-  
-  return false;
-}
-
-export function evaluateBoard(game: Chess): number {
-  let score = 0;
-  const board = game.board();
-  const endgame = isEndgame(game);
-  
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const piece = board[r][c];
-      if (piece) {
-        const pieceVal = pieceValues[piece.type];
-        let psqtBonus = 0;
-        
-        // Mirror files/ranks as appropriate for Black
-        const pr = piece.color === 'w' ? r : 7 - r;
-        const pc = c;
-        
-        if (piece.type === 'p') {
-          psqtBonus = pawnPST[pr][pc];
-        } else if (piece.type === 'n') {
-          psqtBonus = knightPST[pr][pc];
-        } else if (piece.type === 'b') {
-          psqtBonus = bishopPST[pr][pc];
-        } else if (piece.type === 'r') {
-          psqtBonus = rookPST[pr][pc];
-        } else if (piece.type === 'q') {
-          psqtBonus = queenPST[pr][pc];
-        } else if (piece.type === 'k') {
-          psqtBonus = endgame ? kingEndgamePST[pr][pc] : kingPST[pr][pc];
-        }
-        
-        const total = pieceVal + psqtBonus;
-        score += piece.color === 'w' ? total : -total;
-      }
+  // Endgame adjustment for kings
+  const endgame = (!hasWhiteQueen && !hasBlackQueen) || 
+                  (hasWhiteQueen && whitePiecesMaterial <= 1300 && !hasBlackQueen) || 
+                  (hasBlackQueen && blackPiecesMaterial <= 1300 && !hasWhiteQueen) || 
+                  (hasWhiteQueen && hasBlackQueen && whitePiecesMaterial <= 900 && blackPiecesMaterial <= 900);
+                  
+  if (endgame) {
+    if (whiteKingPos) {
+      score -= kingPST[whiteKingPos.r][whiteKingPos.c];
+      score += kingEndgamePST[whiteKingPos.r][whiteKingPos.c];
+    }
+    if (blackKingPos) {
+      score += kingPST[blackKingPos.r][blackKingPos.c];
+      score -= kingEndgamePST[blackKingPos.r][blackKingPos.c];
     }
   }
   
@@ -164,31 +170,45 @@ function limitTT() {
 }
 
 export function minimax(game: Chess, depth: number, alpha: number, beta: number, isMaximizingPlayer: boolean): number {
-  const fen = game.fen();
-  const ttEntry = tt.get(fen);
-  if (ttEntry && ttEntry.depth >= depth) {
-    if (ttEntry.flag === TT_EXACT) return ttEntry.score;
-    if (ttEntry.flag === TT_ALPHA && ttEntry.score <= alpha) return alpha;
-    if (ttEntry.flag === TT_BETA && ttEntry.score >= beta) return beta;
-  }
-
-  if (game.isCheckmate()) {
-    // The current player is checkmated, so the other player wins
-    return game.turn() === 'w' ? -20000 : 20000;
-  }
-  if (game.isDraw()) {
-    return 0;
-  }
   if (depth === 0) {
     return evaluateBoard(game);
   }
 
+  let fen = "";
+  if (depth >= 3) {
+    fen = game.fen();
+    const ttEntry = tt.get(fen);
+    if (ttEntry && ttEntry.depth >= depth) {
+      if (ttEntry.flag === TT_EXACT) return ttEntry.score;
+      if (ttEntry.flag === TT_ALPHA && ttEntry.score <= alpha) return alpha;
+      if (ttEntry.flag === TT_BETA && ttEntry.score >= beta) return beta;
+    }
+  }
+
   const moves = game.moves({ verbose: true });
+  
+  if (moves.length === 0) {
+    if (game.isCheckmate()) {
+      return isMaximizingPlayer ? -20000 : 20000;
+    }
+    return 0; // Stalemate or draw
+  }
+  
+  if (game.isDraw()) {
+    return 0;
+  }
+
   moves.sort((a, b) => {
-    let scoreA = a.captured ? 10 : 0;
-    let scoreB = b.captured ? 10 : 0;
-    if (a.promotion) scoreA += 5;
-    if (b.promotion) scoreB += 5;
+    let scoreA = 0;
+    let scoreB = 0;
+    if (a.captured) {
+      scoreA += 10 * pieceValues[a.captured] - pieceValues[a.piece];
+    }
+    if (b.captured) {
+      scoreB += 10 * pieceValues[b.captured] - pieceValues[b.piece];
+    }
+    if (a.promotion) scoreA += pieceValues[a.promotion] * 10;
+    if (b.promotion) scoreB += pieceValues[b.promotion] * 10;
     return scoreB - scoreA;
   });
 
@@ -216,18 +236,18 @@ export function minimax(game: Chess, depth: number, alpha: number, beta: number,
     }
   }
 
-  // Store in Transposition Table
-  let flag = TT_EXACT;
-  if (isMaximizingPlayer) {
-    if (bestVal <= originalAlpha) flag = TT_ALPHA;
-    else if (bestVal >= beta) flag = TT_BETA;
-  } else {
-    if (bestVal >= originalBeta) flag = TT_BETA;
-    else if (bestVal <= alpha) flag = TT_ALPHA;
+  if (depth >= 3) {
+    let flag = TT_EXACT;
+    if (isMaximizingPlayer) {
+      if (bestVal <= originalAlpha) flag = TT_ALPHA;
+      else if (bestVal >= beta) flag = TT_BETA;
+    } else {
+      if (bestVal >= originalBeta) flag = TT_BETA;
+      else if (bestVal <= alpha) flag = TT_ALPHA;
+    }
+    limitTT();
+    tt.set(fen, { depth, score: bestVal, flag });
   }
-  
-  limitTT();
-  tt.set(fen, { depth, score: bestVal, flag });
 
   return bestVal;
 }
@@ -238,10 +258,16 @@ export function getBestMove(game: Chess, depth: number): { move: string, score: 
 
   // Sort root moves by captures/promotions first to maximize alpha-beta pruning efficiency
   moves.sort((a, b) => {
-    let scoreA = a.captured ? 10 : 0;
-    let scoreB = b.captured ? 10 : 0;
-    if (a.promotion) scoreA += 5;
-    if (b.promotion) scoreB += 5;
+    let scoreA = 0;
+    let scoreB = 0;
+    if (a.captured) {
+      scoreA += 10 * pieceValues[a.captured] - pieceValues[a.piece];
+    }
+    if (b.captured) {
+      scoreB += 10 * pieceValues[b.captured] - pieceValues[b.piece];
+    }
+    if (a.promotion) scoreA += pieceValues[a.promotion] * 10;
+    if (b.promotion) scoreB += pieceValues[b.promotion] * 10;
     return scoreB - scoreA;
   });
 
@@ -333,11 +359,14 @@ export function getMoveGrade(
   }
 
   // 2. Book Move
-  if (context?.historyLength !== undefined && context.historyLength <= 8 && context.san) {
+  if (context?.historyLength !== undefined && context.historyLength <= 4) {
+    // Treat the first 2 full moves as Book if they don't significantly worsen the position, 
+    // and are common opening moves
     const isCommonMove = isWhite
-      ? ["e4", "d4", "Nf3", "c4", "g3", "Nc3"].includes(context.san)
-      : ["e5", "c5", "Nf6", "e6", "d5", "g6", "c6", "d6", "Nc6"].includes(context.san);
-    if (isCommonMove && deltaP <= 0.03) {
+      ? ["e4", "d4", "Nf3", "c4"].includes(context.san || "")
+      : ["e5", "c5", "Nf6", "e6", "d5", "c6", "g6"].includes(context.san || "");
+      
+    if ((context.historyLength <= 2 || isCommonMove) && deltaP <= 0.03) {
       return "Book";
     }
   }
@@ -389,12 +418,12 @@ export function getMoveGrade(
     }
   }
 
-  if (deltaP <= 0.02) return "Best";       // Lost <= 2% win probability (matches engine prediction)
-  if (deltaP <= 0.06) return "Excellent";  // Lost <= 6%
-  if (deltaP <= 0.13) return "Good";       // Lost <= 13%
-  if (deltaP <= 0.23) return "Inaccuracy"; // Lost <= 23%
-  if (deltaP <= 0.38) return "Mistake";    // Lost <= 38%
-  return "Blunder";                        // Lost > 38% (critical mistake)
+  if (deltaP <= 0.03) return "Best";       // Lost <= 3% win probability
+  if (deltaP <= 0.08) return "Excellent";  // Lost <= 8%
+  if (deltaP <= 0.15) return "Good";       // Lost <= 15%
+  if (deltaP <= 0.25) return "Inaccuracy"; // Lost <= 25%
+  if (deltaP <= 0.40) return "Mistake";    // Lost <= 40%
+  return "Blunder";                        // Lost > 40% (critical mistake)
 }
 
 export function calculateAccuracy(grades: string[]): number {
@@ -404,8 +433,8 @@ export function calculateAccuracy(grades: string[]): number {
   const weights: Record<string, number> = {
     "Brilliant": 100,
     "Great Move": 100,
-    "Excellent": 100,
-    "Best": 95,
+    "Best": 100,
+    "Excellent": 90,
     "Book": 100,
     "Forced": 100,
     "Good": 75,
