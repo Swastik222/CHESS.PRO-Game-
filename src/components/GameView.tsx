@@ -43,6 +43,8 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
     history,
     isEncrypted,
     resignedBy,
+    undoRequest,
+    handleUndoResponse,
     makeMove,
     requestUndo,
     sendMessage,
@@ -626,6 +628,34 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {undoRequest && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-md p-4 animate-in fade-in zoom-in-95 duration-200">
+           <div className="bg-white dark:bg-[#111115] border border-gray-200 dark:border-white/10 rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center">
+             <div className="w-12 h-12 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center mx-auto mb-4">
+               <RotateCcw className="w-6 h-6" />
+             </div>
+             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Undo Request</h3>
+             <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                <strong className="text-gray-900 dark:text-white">{undoRequest}</strong> has requested to undo the last move.
+             </p>
+             <div className="flex items-center gap-3">
+               <button 
+                 onClick={() => handleUndoResponse(false)}
+                 className="flex-1 py-2.5 px-4 bg-gray-100 dark:bg-[#1d1d20] hover:bg-gray-200 dark:hover:bg-[#2a2a2c] text-gray-700 dark:text-gray-300 rounded-xl text-sm font-bold transition-colors"
+               >
+                 Decline
+               </button>
+               <button 
+                 onClick={() => handleUndoResponse(true)}
+                 className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-colors shadow-md"
+               >
+                 Accept
+               </button>
+             </div>
+           </div>
         </div>
       )}
     </div>

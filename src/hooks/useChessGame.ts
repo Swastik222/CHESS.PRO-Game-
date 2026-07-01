@@ -24,6 +24,22 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
   const [playerColor, setPlayerColor] = useState<"w" | "b">("w");
   const [messages, setMessages] = useState<{ sender: string; text: string; id: string }[]>([]);
   const [history, setHistory] = useState<MoveHistory[]>([]);
+  const [undoRequest, setUndoRequest] = useState<string | null>(null);
+
+  const handleUndoResponse = useCallback((accept: boolean) => {
+    if (!socket || !roomId) return;
+    if (accept) {
+      const newGame = new Chess(game.fen());
+      newGame.undo();
+      newGame.undo(); // undo both turns if needed, or just one
+      const newFen = newGame.fen();
+      socket.emit("undo_accept", roomId, newFen);
+      setGame(newGame);
+    } else {
+      socket.emit("undo_reject", roomId);
+    }
+    setUndoRequest(null);
+  }, [socket, roomId, game]);
   
   const { playMove, playCapture, playCheckmate } = useChessSounds(soundEnabled);
   
@@ -140,16 +156,7 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
     });
 
     socket.on("undo_request", () => {
-       // Auto accept for simplicity, or could prompt user
-       if (window.confirm(`${opponent} requested an undo. Accept?`)) {
-          const newGame = new Chess(game.fen());
-          newGame.undo();
-          newGame.undo(); // undo both turns if needed, or just one
-          const newFen = newGame.fen();
-          socket.emit("undo_accept", roomId, newFen);
-       } else {
-          socket.emit("undo_reject", roomId);
-       }
+       setUndoRequest(opponent || "Opponent");
     });
 
     socket.on("undo_accepted", (newFen: string) => {
@@ -314,6 +321,8 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
     history,
     isEncrypted,
     resignedBy,
+    undoRequest,
+    handleUndoResponse,
     makeMove,
     requestUndo,
     sendMessage,

@@ -42,6 +42,9 @@ export default function App() {
   const [onlineUsersList, setOnlineUsersList] = useState<{id: string, username: string}[]>([]);
   const [showOnlinePlayers, setShowOnlinePlayers] = useState(false);
   const [globalSocket, setGlobalSocket] = useState<any>(null);
+  const [incomingChallenge, setIncomingChallenge] = useState<{fromUsername: string, roomId: string} | null>(null);
+  const [rejectedChallenge, setRejectedChallenge] = useState<boolean>(false);
+  const [waitingChallenge, setWaitingChallenge] = useState<string | null>(null);
 
   useEffect(() => {
     let unsubscribeSnapshot: (() => void) | undefined;
@@ -119,20 +122,18 @@ export default function App() {
     });
 
     newSocket.on("receive_challenge", (data: { fromUsername: string, roomId: string }) => {
-      if (window.confirm(`${data.fromUsername} challenged you! Accept?`)) {
-         newSocket.emit("accept_challenge", { toUsername: data.fromUsername, roomId: data.roomId });
-         handleStartGame("online", data.roomId);
-      } else {
-         newSocket.emit("reject_challenge", { toUsername: data.fromUsername });
-      }
+      setIncomingChallenge(data);
     });
 
     newSocket.on("challenge_accepted", (data: { roomId: string }) => {
+       setWaitingChallenge(null);
        handleStartGame("online", data.roomId);
     });
 
     newSocket.on("challenge_rejected", () => {
-       alert("Your challenge was rejected.");
+       setWaitingChallenge(null);
+       setRejectedChallenge(true);
+       setTimeout(() => setRejectedChallenge(false), 3000);
     });
 
     return () => {
@@ -310,9 +311,57 @@ export default function App() {
           onChallenge={(targetUsername) => {
              const newRoomId = Math.random().toString(36).substring(2, 9);
              globalSocket?.emit("challenge_user", { targetUsername, fromUsername: user.username, roomId: newRoomId });
-             alert(`Challenge sent to ${targetUsername}! Waiting for response...`);
+             setWaitingChallenge(targetUsername);
           }}
         />
+      )}
+
+      {incomingChallenge && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-md p-4 animate-in fade-in zoom-in-95 duration-200">
+           <div className="bg-white dark:bg-[#111115] border border-gray-200 dark:border-white/10 rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center">
+             <div className="w-12 h-12 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center mx-auto mb-4">
+               <Trophy className="w-6 h-6" />
+             </div>
+             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Challenge Received!</h3>
+             <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                <strong className="text-gray-900 dark:text-white">{incomingChallenge.fromUsername}</strong> has challenged you to a match.
+             </p>
+             <div className="flex items-center gap-3">
+               <button 
+                 onClick={() => {
+                   globalSocket?.emit("reject_challenge", { toUsername: incomingChallenge.fromUsername });
+                   setIncomingChallenge(null);
+                 }}
+                 className="flex-1 py-2.5 px-4 bg-gray-100 dark:bg-[#1d1d20] hover:bg-gray-200 dark:hover:bg-[#2a2a2c] text-gray-700 dark:text-gray-300 rounded-xl text-sm font-bold transition-colors"
+               >
+                 Decline
+               </button>
+               <button 
+                 onClick={() => {
+                   globalSocket?.emit("accept_challenge", { toUsername: incomingChallenge.fromUsername, roomId: incomingChallenge.roomId });
+                   handleStartGame("online", incomingChallenge.roomId);
+                   setIncomingChallenge(null);
+                 }}
+                 className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-colors shadow-md"
+               >
+                 Accept
+               </button>
+             </div>
+           </div>
+        </div>
+      )}
+
+      {rejectedChallenge && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-red-100 dark:bg-red-500/20 border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400 px-6 py-3 rounded-full text-sm font-bold shadow-lg animate-in slide-in-from-bottom-5 fade-in duration-300">
+           Challenge was declined.
+        </div>
+      )}
+
+      {waitingChallenge && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-blue-100 dark:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 text-blue-700 dark:text-blue-400 px-6 py-3 rounded-full text-sm font-bold shadow-lg flex items-center gap-2 animate-in slide-in-from-bottom-5 fade-in duration-300">
+           <div className="w-4 h-4 border-2 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+           Waiting for {waitingChallenge} to respond...
+        </div>
       )}
     </div>
   );
