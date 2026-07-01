@@ -261,8 +261,8 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
         (async () => {
            // We calculate both the previous score and the current move score simultaneously on the dedicated grading worker so we don't block the AI worker
             const [beforeInfo, afterInfo] = await Promise.all([
-             asyncGetBestMove(oldFen, 4, false), // Run on Grading worker
-             asyncGetBestMove(newGame.fen(), 4, false) // Run on Grading worker
+             asyncGetBestMove(oldFen, 3, false), // Run on Grading worker
+             asyncGetBestMove(newGame.fen(), 3, false) // Run on Grading worker
            ]);
            
            // Gather context for Chess.com move analysis
@@ -346,13 +346,13 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
 
                 // 3. Evaluate the move's grade in the background in parallel on the grading worker!
                 let beforePromise;
-                if (aiLevel >= 4) {
+                if (aiLevel >= 3) {
                     beforePromise = Promise.resolve({ score: aiMoveInfo.score, allEvaluations: aiMoveInfo.allEvaluations });
                 } else {
-                    beforePromise = asyncGetBestMove(aiFen, 4, false); // Grading worker
+                    beforePromise = asyncGetBestMove(aiFen, 3, false); // Grading worker
                 }
                 
-                const afterPromise = asyncGetBestMove(aiGame.fen(), 4, false); // Grading worker
+                const afterPromise = asyncGetBestMove(aiGame.fen(), 3, false); // Grading worker
                 
                 const [beforeInfo, afterInfo] = await Promise.all([beforePromise, afterPromise]);
 

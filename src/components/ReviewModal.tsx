@@ -47,7 +47,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({ match, onClose }) => {
             <Chessboard
               options={{
                 position: fen,
-                allowDragging: false,
+                allowDragging: false, animationDurationInMs: 0, showAnimations: false,
                 darkSquareStyle: { backgroundColor: "#779556" },
                 lightSquareStyle: { backgroundColor: "#ebecd0" }
               }}

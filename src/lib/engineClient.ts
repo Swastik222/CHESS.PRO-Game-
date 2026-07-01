@@ -57,11 +57,79 @@ class WorkerPool {
 const pool = new WorkerPool();
 
 export function asyncGetBestMove(fen: string, depth: number, useAIWorker: boolean = false): Promise<{ move: string; score: number; allEvaluations?: { move: string; score: number }[] }> {
-  return pool.runTask('getBestMove', { fen, depth }).then((res) => {
-    return {
+  const game = new Chess(fen);
+  const moves = game.moves({ verbose: true });
+  
+  if (moves.length === 0) {
+    return Promise.resolve({ move: "", score: 0 });
+  }
+
+  // If depth is extremely low or only 1 move is available, sequential search on a single worker is faster than parallel overhead
+  if (depth <= 1 || moves.length === 1) {
+    return pool.runTask('getBestMove', { fen, depth }).then((res) => ({
       move: res.move,
       score: res.score,
       allEvaluations: res.allEvaluations
+    }));
+  }
+
+  // Sort moves like in getBestMove for better parallel performance
+  moves.sort((a, b) => {
+    let scoreA = a.captured ? 10 : 0;
+    let scoreB = b.captured ? 10 : 0;
+    if (a.promotion) scoreA += 5;
+    if (b.promotion) scoreB += 5;
+    return scoreB - scoreA;
+  });
+
+  const rootIsWhite = game.turn() === 'w';
+
+  // Run searches for each move's child position in parallel!
+  const promises = moves.map(async (move) => {
+    const childGame = new Chess(fen);
+    childGame.move(move.san);
+    const isMaximizing = childGame.turn() === 'w';
+    
+    // Evaluate the child position at depth - 1
+    const score = await pool.runTask('evaluatePosition', {
+      fen: childGame.fen(),
+      depth: depth - 1,
+      alpha: -Infinity,
+      beta: Infinity,
+      isMaximizingPlayer: isMaximizing
+    });
+    
+    return { move: move.san, score };
+  });
+
+  return Promise.all(promises).then((results) => {
+    let bestScore = rootIsWhite ? -Infinity : Infinity;
+    let bestMoves: string[] = [];
+
+    for (const res of results) {
+      if (rootIsWhite) {
+        if (res.score > bestScore) {
+          bestScore = res.score;
+          bestMoves = [res.move];
+        } else if (res.score === bestScore) {
+          bestMoves.push(res.move);
+        }
+      } else {
+        if (res.score < bestScore) {
+          bestScore = res.score;
+          bestMoves = [res.move];
+        } else if (res.score === bestScore) {
+          bestMoves.push(res.move);
+        }
+      }
+    }
+
+    const bestMove = bestMoves[Math.floor(Math.random() * bestMoves.length)] || moves[0].san;
+
+    return {
+      move: bestMove,
+      score: bestScore,
+      allEvaluations: results
     };
   });
 }

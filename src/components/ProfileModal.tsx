@@ -225,7 +225,7 @@ function ReviewBoard({ fen }: { fen: string }) {
   
   if (!Chessboard) return <div className="aspect-square bg-gray-100 dark:bg-[#1a1a1c] animate-pulse rounded-lg" />;
   
-  return <Chessboard options={{ position: fen, allowDragging: false, darkSquareStyle: { backgroundColor: "#779556" }, lightSquareStyle: { backgroundColor: "#ebecd0" } }} />;
+  return <Chessboard options={{ position: fen, allowDragging: false, animationDurationInMs: 0, showAnimations: false, darkSquareStyle: { backgroundColor: "#779556" }, lightSquareStyle: { backgroundColor: "#ebecd0" } }} />;
 }
 
 function StatCard({ icon, label, value }: { icon: React.ReactNode, label: string, value: string | number }) {

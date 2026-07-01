@@ -1,7 +1,6 @@
 import React from "react";
 import { PieceStyle } from "../types";
 import { Chess } from "chess.js";
-import { motion } from "motion/react";
 
 /**
  * Calculates a stable square-to-pieceId mapping by replaying SAN or UCI moves
@@ -108,15 +107,8 @@ export const getCustomPieces = (pieceStyle: PieceStyle, mapping?: Record<string,
       const src = `https://lichess1.org/assets/piece/${actualStyle}/${piece}.svg`;
 
       return (
-        <motion.div
-          layoutId={pieceId}
-          layout={!!pieceId}
-          transition={{
-            type: "spring",
-            stiffness: 300,
-            damping: 28,
-            mass: 0.7
-          }}
+        <div
+          id={pieceId}
           style={{
             width: "100%",
             height: "100%",
@@ -139,7 +131,7 @@ export const getCustomPieces = (pieceStyle: PieceStyle, mapping?: Record<string,
               userSelect: "none"
             }}
           />
-        </motion.div>
+        </div>
       );
     };
   });

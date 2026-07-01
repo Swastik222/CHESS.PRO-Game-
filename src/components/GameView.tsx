@@ -4,7 +4,6 @@ import { GameMode, PlayerInfo } from "../App";
 import { useChessGame } from "../hooks/useChessGame";
 import { Copy, LogOut, Send, ShieldCheck, Clock, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Bot, Users, User } from "lucide-react";
 import { cn } from "../lib/utils";
-import { motion } from "motion/react";
 import { calculateAccuracy, getCalibratedAccuracies, getPerformanceRating } from "../lib/engine";
 import { Chess } from "chess.js";
 
@@ -57,14 +56,6 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
   const [optionSquares, setOptionSquares] = useState<Record<string, any>>({});
 
-  interface CaptureEffect {
-    id: string;
-    square: string;
-    top: number;
-    left: number;
-  }
-  const [captureEffects, setCaptureEffects] = useState<CaptureEffect[]>([]);
-
   const [showResultModal, setShowResultModal] = useState(true);
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
   const matchLogged = React.useRef(false);
@@ -96,47 +87,6 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
       saveMatchResult(user.uid, oppName, mode || "ai", result, history.map(h => h.san));
     }
   }, [isMatchOver, user, playerColor, resignedBy, timeoutColor, game, mode, opponent, history]);
-
-  // Trigger capture animation when a move contains "x"
-  React.useEffect(() => {
-    if (history.length === 0 || currentReviewIndex !== history.length) return;
-    const latestMove = history[history.length - 1];
-    if (latestMove && latestMove.san && latestMove.san.includes('x')) {
-      const match = latestMove.san.match(/[a-h][1-8]/);
-      if (match) {
-        const square = match[0];
-        const file = square[0];
-        const rank = parseInt(square[1]);
-        
-        const orientation = mode === "local" ? (game.turn() === "w" ? "white" : "black") : (playerColor === "w" ? "white" : "black");
-        
-        let col = file.charCodeAt(0) - 97;
-        let row = 8 - rank;
-        
-        if (orientation === "black") {
-          col = 7 - col;
-          row = rank - 1;
-        }
-        
-        const left = ((col + 0.5) / 8) * 100;
-        const top = ((row + 0.5) / 8) * 100;
-        
-        const newEffect: CaptureEffect = {
-          id: `${square}_${Date.now()}_${Math.random()}`,
-          square,
-          top,
-          left
-        };
-        
-        setCaptureEffects(prev => [...prev, newEffect]);
-        
-        // Remove after 1 second
-        setTimeout(() => {
-          setCaptureEffects(prev => prev.filter(e => e.id !== newEffect.id));
-        }, 1000);
-      }
-    }
-  }, [history.length, mode, playerColor, game, currentReviewIndex]);
 
   const reviewFen = React.useMemo(() => {
     if (!isMatchOver) return game.fen();
@@ -367,51 +317,10 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
               lightSquareStyle: { backgroundColor: THEME_COLORS[boardTheme].light },
               pieces: getCustomPieces(pieceStyle, pieceMapping),
               animationDurationInMs: 0,
+              showAnimations: false,
               squareStyles: optionSquares
             }}
           />
-
-          {/* Subtle capture animation effects */}
-          {captureEffects.map((effect) => (
-            <div
-              key={effect.id}
-              className="absolute pointer-events-none"
-              style={{
-                left: `${effect.left}%`,
-                top: `${effect.top}%`,
-                transform: "translate(-50%, -50%)",
-                zIndex: 40,
-              }}
-            >
-              {/* Concentric expanding ripple ring */}
-              <motion.div
-                initial={{ scale: 0.3, opacity: 1, border: "2px solid rgba(239, 68, 68, 0.8)" }}
-                animate={{ scale: 1.8, opacity: 0, border: "1px solid rgba(239, 68, 68, 0)" }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
-                className="absolute rounded-full"
-                style={{ width: "60px", height: "60px", marginLeft: "-30px", marginTop: "-30px" }}
-              />
-              
-              {/* Dynamic splash particles */}
-              {[...Array(6)].map((_, i) => {
-                const angle = (i * 60 * Math.PI) / 180;
-                const distance = 25 + Math.random() * 15;
-                const targetX = Math.cos(angle) * distance;
-                const targetY = Math.sin(angle) * distance;
-                
-                return (
-                  <motion.div
-                    key={i}
-                    initial={{ x: 0, y: 0, scale: 1, opacity: 0.9 }}
-                    animate={{ x: targetX, y: targetY, scale: 0, opacity: 0 }}
-                    transition={{ duration: 0.5, ease: "easeOut" }}
-                    className="absolute w-2 h-2 bg-red-500 rounded-full"
-                    style={{ marginLeft: "-4px", marginTop: "-4px" }}
-                  />
-                );
-              })}
-            </div>
-          ))}
         </div>
 
         <div className="w-full max-w-[600px] flex justify-between items-start mt-2 px-1">

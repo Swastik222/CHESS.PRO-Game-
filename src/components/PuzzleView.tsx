@@ -148,6 +148,7 @@ export function PuzzleView({ onExit, darkMode = true, boardTheme = "green", piec
               lightSquareStyle: { backgroundColor: THEME_COLORS[boardTheme].light },
               pieces: getCustomPieces(pieceStyle, pieceMapping),
               animationDurationInMs: 0,
+              showAnimations: false,
               squareStyles: hintSquare ? {
                 [hintSquare]: { backgroundColor: "rgba(255, 255, 0, 0.4)" }
               } : undefined
