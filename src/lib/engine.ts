@@ -30,17 +30,31 @@ export function evaluateBoard(game: Chess): number {
   return totalEvaluation;
 }
 
-function minimax(game: Chess, depth: number, alpha: number, beta: number, isMaximizingPlayer: boolean): number {
-  if (depth === 0 || game.isGameOver()) {
+export function minimax(game: Chess, depth: number, alpha: number, beta: number, isMaximizingPlayer: boolean): number {
+  if (game.isCheckmate()) {
+    // The current player is checkmated, so the other player wins
+    return game.turn() === 'w' ? -20000 : 20000;
+  }
+  if (game.isDraw()) {
+    return 0;
+  }
+  if (depth === 0) {
     return evaluateBoard(game);
   }
 
-  const moves = game.moves();
+  const moves = game.moves({ verbose: true });
+  moves.sort((a, b) => {
+    let scoreA = a.captured ? 10 : 0;
+    let scoreB = b.captured ? 10 : 0;
+    if (a.promotion) scoreA += 5;
+    if (b.promotion) scoreB += 5;
+    return scoreB - scoreA;
+  });
 
   if (isMaximizingPlayer) {
     let bestVal = -Infinity;
     for (const move of moves) {
-      game.move(move);
+      game.move(move.san);
       const value = minimax(game, depth - 1, alpha, beta, false);
       game.undo();
       bestVal = Math.max(bestVal, value);
@@ -51,7 +65,7 @@ function minimax(game: Chess, depth: number, alpha: number, beta: number, isMaxi
   } else {
     let bestVal = Infinity;
     for (const move of moves) {
-      game.move(move);
+      game.move(move.san);
       const value = minimax(game, depth - 1, alpha, beta, true);
       game.undo();
       bestVal = Math.min(bestVal, value);
@@ -97,11 +111,11 @@ export function getBestMove(game: Chess, depth: number): { move: string, score: 
 export function getMoveGrade(scoreBefore: number, scoreAfter: number, isWhite: boolean): string {
   const delta = isWhite ? (scoreAfter - scoreBefore) : (scoreBefore - scoreAfter);
   
-  if (delta >= -5) return "Best";
-  if (delta >= -20) return "Excellent";
-  if (delta >= -50) return "Good";
-  if (delta >= -100) return "Inaccuracy";
-  if (delta >= -250) return "Mistake";
+  if (delta >= -10) return "Best";
+  if (delta >= -30) return "Excellent";
+  if (delta >= -80) return "Good";
+  if (delta >= -150) return "Inaccuracy";
+  if (delta >= -300) return "Mistake";
   return "Blunder";
 }
 

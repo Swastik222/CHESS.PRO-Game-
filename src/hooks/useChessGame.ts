@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Chess, Move } from "chess.js";
 import { io, Socket } from "socket.io-client";
 import { CryptoManager } from "../lib/crypto";
-import { getBestMove, getMoveGrade, calculateAccuracy } from "../lib/engine";
+import { getBestMove, getMoveGrade, calculateAccuracy, minimax } from "../lib/engine";
 import { useChessSounds } from "./useChessSounds";
 
 export type GameMode = "ai" | "local" | "online" | "puzzle";
@@ -222,14 +222,14 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
     }
 
     try {
-      let scoreBefore = getBestMove(game, 2).score;
+      let scoreBefore = getBestMove(game, 3).score;
 
       const newGame = new Chess(game.fen());
       const result = newGame.move(move);
       
       if (result) {
         let grade = "";
-        const scoreAfter = getBestMove(newGame, 1).score;
+        const scoreAfter = getBestMove(newGame, 2).score;
         grade = getMoveGrade(scoreBefore, scoreAfter, game.turn() === 'w');
 
         setGame(newGame);
@@ -254,13 +254,13 @@ export function useChessGame(mode: GameMode, user: PlayerInfo | null, roomId?: s
             setTimeout(() => {
                 const aiGame = new Chess(newGame.fen());
                 
-                const aiScoreBefore = getBestMove(aiGame, 2).score;
+                const aiScoreBefore = getBestMove(aiGame, 3).score;
                 
                 // Depth 3 for better AI, Depth 1 or 2 for easier
                 const aiMoveInfo = getBestMove(aiGame, aiLevel);
                 aiGame.move(aiMoveInfo.move);
                 
-                const aiScoreAfter = getBestMove(aiGame, 1).score;
+                const aiScoreAfter = getBestMove(aiGame, 2).score;
                 const aiGrade = getMoveGrade(aiScoreBefore, aiScoreAfter, false);
                 
                 setGame(aiGame);
