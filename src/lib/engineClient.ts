@@ -65,16 +65,37 @@ class WorkerPool {
 const aiPool = new WorkerPool(2); 
 const gradingPool = new WorkerPool(Math.max(2, (typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 4) - 2));
 
+const moveCache = new Map<string, Promise<{ move: string; score: number; allEvaluations?: { move: string; score: number }[] }>>();
+
+function limitMoveCache() {
+  if (moveCache.size > 2000) {
+    const keys = moveCache.keys();
+    let count = 0;
+    for (const key of keys) {
+      moveCache.delete(key);
+      count++;
+      if (count >= 500) break;
+    }
+  }
+}
+
 export function asyncGetBestMove(fen: string, depth: number, useAIWorker: boolean = false): Promise<{ move: string; score: number; allEvaluations?: { move: string; score: number }[] }> {
+  const cacheKey = `${fen}_${depth}`;
+  if (moveCache.has(cacheKey)) {
+    return moveCache.get(cacheKey)!;
+  }
+
   const pool = useAIWorker ? aiPool : gradingPool;
   
-  // Directly run standard getBestMove which utilizes proper alpha-beta pruning
-  // This is much faster than parallelizing without root alpha-beta sharing
-  return pool.runTask('getBestMove', { fen, depth }).then((res) => ({
+  limitMoveCache();
+  const promise = pool.runTask('getBestMove', { fen, depth }).then((res) => ({
     move: res.move,
     score: res.score,
     allEvaluations: res.allEvaluations
   }));
+
+  moveCache.set(cacheKey, promise);
+  return promise;
 }
 
 // Keep signature for compatibility

@@ -132,6 +132,37 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
     return true;
   }
 
+  const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null);
+
+  function isPromotionMove(from: string, to: string): boolean {
+    const piece = game.get(from as any);
+    if (!piece || piece.type !== 'p') return false;
+    
+    const targetRank = to[1];
+    if (piece.color === 'w' && targetRank !== '8') return false;
+    if (piece.color === 'b' && targetRank !== '1') return false;
+    
+    try {
+      const tempGame = new Chess(game.fen());
+      const moveResult = tempGame.move({ from, to, promotion: 'q' });
+      return !!moveResult;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  const handleSelectPromotion = (promotionPiece: string) => {
+    if (!pendingPromotion) return;
+    makeMove({
+      from: pendingPromotion.from,
+      to: pendingPromotion.to,
+      promotion: promotionPiece,
+    });
+    setPendingPromotion(null);
+    setMoveFrom(null);
+    setOptionSquares({});
+  };
+
   function onSquareClick({ square }: { piece: any, square: string }) {
     if (game.isGameOver() || resignedBy) return;
 
@@ -145,6 +176,11 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
       const hasMoveOptions = getMoveOptions(square);
       setMoveFrom(hasMoveOptions ? square : null);
       if (!hasMoveOptions) setOptionSquares({});
+      return;
+    }
+
+    if (isPromotionMove(moveFrom, square)) {
+      setPendingPromotion({ from: moveFrom, to: square });
       return;
     }
 
@@ -162,6 +198,12 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
 
   const onDrop = ({ sourceSquare, targetSquare, piece }: any) => {
     if (resignedBy) return false;
+
+    if (isPromotionMove(sourceSquare, targetSquare)) {
+      setPendingPromotion({ from: sourceSquare, to: targetSquare });
+      return false;
+    }
+
     const moveResult = makeMove({
       from: sourceSquare,
       to: targetSquare,
@@ -321,6 +363,57 @@ export function GameView({ mode, user, roomId, aiLevel, onExit, darkMode = true,
               squareStyles: optionSquares
             }}
           />
+
+          {pendingPromotion && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300">
+              <div className="bg-white dark:bg-[#1a1a1d] p-6 rounded-2xl border border-gray-200 dark:border-white/10 shadow-2xl text-center max-w-sm w-[90%] mx-auto transform animate-in fade-in zoom-in duration-200">
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-5">
+                  Select Promotion Piece
+                </h3>
+                <div className="grid grid-cols-4 gap-3">
+                  {[
+                    { type: "q", label: "Queen", code: "Q" },
+                    { type: "r", label: "Rook", code: "R" },
+                    { type: "b", label: "Bishop", code: "B" },
+                    { type: "n", label: "Knight", code: "N" }
+                  ].map((option) => {
+                    const colorCode = game.turn();
+                    const pieceCode = `${colorCode}${option.code}`;
+                    const actualStyle = pieceStyle === "classic" ? "cburnett" : pieceStyle;
+                    const pieceImgSrc = `https://lichess1.org/assets/piece/${actualStyle}/${pieceCode}.svg`;
+
+                    return (
+                      <button
+                        key={option.type}
+                        onClick={() => handleSelectPromotion(option.type)}
+                        className="flex flex-col items-center justify-center p-3 rounded-xl border border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/5 hover:bg-blue-500/10 hover:border-blue-500/30 dark:hover:bg-blue-500/20 dark:hover:border-blue-500/40 transition-all duration-150 group cursor-pointer"
+                      >
+                        <img
+                          src={pieceImgSrc}
+                          alt={option.label}
+                          className="w-12 h-12 mb-2 group-hover:scale-110 transition-transform"
+                          referrerPolicy="no-referrer"
+                        />
+                        <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 group-hover:text-blue-500 dark:group-hover:text-blue-400">
+                          {option.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => {
+                    setPendingPromotion(null);
+                    setMoveFrom(null);
+                    setOptionSquares({});
+                  }}
+                  className="mt-6 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium transition-colors cursor-pointer"
+                >
+                  CANCEL MOVE
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="w-full max-w-[600px] flex justify-between items-start mt-2 px-1">

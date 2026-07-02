@@ -180,8 +180,8 @@ export function minimax(game: Chess, depth: number, alpha: number, beta: number,
     const ttEntry = tt.get(fen);
     if (ttEntry && ttEntry.depth >= depth) {
       if (ttEntry.flag === TT_EXACT) return ttEntry.score;
-      if (ttEntry.flag === TT_ALPHA && ttEntry.score <= alpha) return alpha;
-      if (ttEntry.flag === TT_BETA && ttEntry.score >= beta) return beta;
+      if (ttEntry.flag === TT_ALPHA && ttEntry.score <= alpha) return ttEntry.score;
+      if (ttEntry.flag === TT_BETA && ttEntry.score >= beta) return ttEntry.score;
     }
   }
 
@@ -198,19 +198,21 @@ export function minimax(game: Chess, depth: number, alpha: number, beta: number,
     return 0;
   }
 
-  moves.sort((a, b) => {
-    let scoreA = 0;
-    let scoreB = 0;
-    if (a.captured) {
-      scoreA += 10 * pieceValues[a.captured] - pieceValues[a.piece];
-    }
-    if (b.captured) {
-      scoreB += 10 * pieceValues[b.captured] - pieceValues[b.piece];
-    }
-    if (a.promotion) scoreA += pieceValues[a.promotion] * 10;
-    if (b.promotion) scoreB += pieceValues[b.promotion] * 10;
-    return scoreB - scoreA;
-  });
+  if (depth >= 2) {
+    moves.sort((a, b) => {
+      let scoreA = 0;
+      let scoreB = 0;
+      if (a.captured) {
+        scoreA += 10 * pieceValues[a.captured] - pieceValues[a.piece];
+      }
+      if (b.captured) {
+        scoreB += 10 * pieceValues[b.captured] - pieceValues[b.piece];
+      }
+      if (a.promotion) scoreA += pieceValues[a.promotion] * 10;
+      if (b.promotion) scoreB += pieceValues[b.promotion] * 10;
+      return scoreB - scoreA;
+    });
+  }
 
   let bestVal = isMaximizingPlayer ? -Infinity : Infinity;
   const originalAlpha = alpha;
@@ -341,6 +343,45 @@ export interface MoveGradeContext {
   boardAfterReplyFen?: string;
 }
 
+function isBookMoveCandidate(san: string, isWhite: boolean): boolean {
+  if (!san) return false;
+  if (san === "O-O" || san === "O-O-O") return true;
+  
+  const firstChar = san[0];
+  const isPawn = firstChar >= 'a' && firstChar <= 'h';
+  
+  if (isPawn) {
+    const match = san.match(/[a-h]([3456])/);
+    if (match) {
+      const rank = parseInt(match[1], 10);
+      if (isWhite) {
+        return rank === 3 || rank === 4;
+      } else {
+        return rank === 5 || rank === 6;
+      }
+    }
+    return false;
+  }
+  
+  if (firstChar === 'N') {
+    const dest = san.replace(/[^a-h1-8]/g, "").slice(-2);
+    const validDests = isWhite 
+      ? ["f3", "c3", "d2", "e2", "a3", "h3"]
+      : ["f6", "c6", "d7", "e7", "a6", "h6"];
+    return validDests.includes(dest);
+  }
+  
+  if (firstChar === 'B') {
+    const dest = san.replace(/[^a-h1-8]/g, "").slice(-2);
+    const validDests = isWhite
+      ? ["c4", "b5", "e2", "d3", "g2", "b2", "d2", "e3", "e4", "f4", "g5"]
+      : ["c5", "b4", "e7", "d6", "g7", "b7", "d7", "e6", "e5", "f5", "g4"];
+    return validDests.includes(dest);
+  }
+  
+  return false;
+}
+
 export function getMoveGrade(
   scoreBefore: number,
   scoreAfter: number,
@@ -359,14 +400,9 @@ export function getMoveGrade(
   }
 
   // 2. Book Move
-  if (context?.historyLength !== undefined && context.historyLength <= 4) {
-    // Treat the first 2 full moves as Book if they don't significantly worsen the position, 
-    // and are common opening moves
-    const isCommonMove = isWhite
-      ? ["e4", "d4", "Nf3", "c4"].includes(context.san || "")
-      : ["e5", "c5", "Nf6", "e6", "d5", "c6", "g6"].includes(context.san || "");
-      
-    if ((context.historyLength <= 2 || isCommonMove) && deltaP <= 0.03) {
+  if (context?.historyLength !== undefined && context.historyLength <= 10) {
+    // Treat the first 5 full moves as Book if they are standard developing/opening moves and don't significantly worsen the position
+    if (isBookMoveCandidate(context.san || "", isWhite) && deltaP <= 0.035) {
       return "Book";
     }
   }
