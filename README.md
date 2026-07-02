@@ -7,6 +7,7 @@
 This contains everything you need to run your app locally.
 
 View your app in AI Studio: https://ai.studio/apps/c80bb2f7-d4a1-4421-9145-da8427de7687
+view GCP hosted app link : https://chess-masters-41903822403.asia-southeast1.run.app
 
 ## Run Locally
 
